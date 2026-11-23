@@ -69,6 +69,24 @@ fn auth_error(message: impl Into<String>) -> String {
     message.into()
 }
 
+fn is_valid_offline_name(name: &str) -> bool {
+    (3..=16).contains(&name.len())
+        && name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
+}
+
+fn offline_uuid(name: &str) -> String {
+    let digest = md5::compute(format!("OfflinePlayer:{name}"));
+    let mut bytes = digest.0;
+    bytes[6] = (bytes[6] & 0x0f) | 0x30;
+    bytes[8] = (bytes[8] & 0x3f) | 0x80;
+    format!(
+        "{:02x}{:02x}{:02x}{:02x}-{:02x}{:02x}-{:02x}{:02x}-{:02x}{:02x}-{:02x}{:02x}{:02x}{:02x}{:02x}{:02x}",
+        bytes[0], bytes[1], bytes[2], bytes[3], bytes[4], bytes[5],
+        bytes[6], bytes[7], bytes[8], bytes[9], bytes[10], bytes[11],
+        bytes[12], bytes[13], bytes[14], bytes[15]
+    )
+}
+
 fn is_client_id_format(value: &str) -> bool {
     let parts: Vec<&str> = value.split('-').collect();
     parts.len() == 5
@@ -618,11 +636,25 @@ fn append_metadata_arguments(target: &mut Vec<String>, source: Option<&serde_jso
     }
 }
 #[tauri::command]
-async fn launch_minecraft(version_id: String, auth_state: tauri::State<'_, std::sync::Mutex<Option<MinecraftAuthSession>>>) -> Result<u32, String> {
+async fn launch_minecraft(version_id: String, auth_mode: String, offline_name: Option<String>, auth_state: tauri::State<'_, std::sync::Mutex<Option<MinecraftAuthSession>>>) -> Result<u32, String> {
     let version_id = version_id.trim();
     if version_id.is_empty() || !version_id.chars().next().is_some_and(|c| c.is_ascii_digit()) || !version_id.chars().all(|c| c.is_ascii_alphanumeric() || c == '.' || c == '-' || c == '_') { return Err("Некорректный идентификатор версии Minecraft.".into()); }
-    let session = auth_state.lock().map_err(|_| "Не удалось проверить игровую сессию.".to_string())?.clone()
-        .ok_or_else(|| "Сначала войди через Microsoft в разделе «Настройки».".to_string())?;
+    let (profile, access_token, user_type) = match auth_mode.as_str() {
+        "microsoft" => {
+            let session = auth_state.lock().map_err(|_| "Не удалось проверить игровую сессию.".to_string())?.clone()
+                .ok_or_else(|| "Сначала войди через Microsoft в разделе «Настройки».".to_string())?;
+            (session.profile, session.access_token, "msa".to_string())
+        }
+        "offline" => {
+            let name = offline_name.unwrap_or_default().trim().to_string();
+            if !is_valid_offline_name(&name) {
+                return Err("Некорректный ник Offline-профиля: нужно 3–16 символов (A–Z, a–z, 0–9, _).".into());
+            }
+            let profile = MinecraftProfile { id: offline_uuid(&name), name };
+            (profile, "0".to_string(), "legacy".to_string())
+        }
+        _ => return Err("Неизвестный способ авторизации Minecraft.".into()),
+    };
     let app_data = std::env::var_os("APPDATA").map(std::path::PathBuf::from).ok_or_else(|| "Не найдена папка APPDATA Windows.".to_string())?;
     let root = app_data.join("L-o-S-A");
     let version_dir = root.join("versions").join(version_id);
@@ -691,12 +723,12 @@ async fn launch_minecraft(version_id: String, auth_state: tauri::State<'_, std::
     values.insert("launcher_name".into(), "L.o.S.A.".into()); values.insert("launcher_version".into(), "0.9.1".into());
     values.insert("classpath".into(), classpath.join(if cfg!(windows) { ";" } else { ":" }));
     values.insert("classpath_separator".into(), if cfg!(windows) { ";".into() } else { ":".into() });
-    values.insert("auth_player_name".into(), session.profile.name.clone()); values.insert("version_name".into(), version_id.to_string());
+    values.insert("auth_player_name".into(), profile.name.clone()); values.insert("version_name".into(), version_id.to_string());
     values.insert("game_directory".into(), game_dir.to_string_lossy().to_string()); values.insert("assets_root".into(), assets_root.to_string_lossy().to_string());
     values.insert("assets_index_name".into(), asset_index.to_string());
     values.insert("game_assets".into(), assets_root.join("virtual").join(asset_index).to_string_lossy().to_string());
-    values.insert("auth_uuid".into(), session.profile.id.clone());
-    values.insert("auth_access_token".into(), session.access_token.clone()); values.insert("user_type".into(), "msa".into());
+    values.insert("auth_uuid".into(), profile.id.clone());
+    values.insert("auth_access_token".into(), access_token); values.insert("user_type".into(), user_type);
     values.insert("resolution_width".into(), "854".into()); values.insert("resolution_height".into(), "480".into());
     values.insert("quickPlayPath".into(), String::new()); values.insert("quickPlaySingleplayer".into(), String::new());
     values.insert("quickPlayMultiplayer".into(), String::new()); values.insert("quickPlayRealms".into(), String::new());
@@ -775,6 +807,21 @@ pub fn run() {
 #[cfg(test)]
 mod launcher_tests {
     use super::*;
+
+    #[test]
+    fn offline_uuid_matches_minecraft_name_uuid_format() {
+        assert_eq!(offline_uuid("Notch"), "b50ad385-829d-3141-a216-7e7d7539ba7f");
+    }
+
+    #[test]
+    fn validates_offline_player_names() {
+        assert!(is_valid_offline_name("Steve_123"));
+        assert!(is_valid_offline_name("abc"));
+        assert!(!is_valid_offline_name("ab"));
+        assert!(!is_valid_offline_name("a name"));
+        assert!(!is_valid_offline_name("имя"));
+        assert!(!is_valid_offline_name("this_name_is_way_too_long"));
+    }
 
     #[test]
     fn parses_java_versions() {
