@@ -8,10 +8,12 @@ on:
       - "feature/v0.7-minecraft-dependencies"
       - "feature/v0.8-minecraft-launch"
       - "feature/v0.9-authentication-foundation"
+      - "feature/v0.9.1-install-state"
   push:
     branches:
       - "feature/v0.8-minecraft-launch"
       - "feature/v0.9-authentication-foundation"
+      - "feature/v0.9.1-install-state"
     tags:
       - "v*"
 
