@@ -158,7 +158,7 @@ async fn complete_microsoft_login(client_id: String, device_code: String, interv
     let mc_token: MinecraftLoginResponse = minecraft.json().await
         .map_err(|e| auth_error(format!("Не удалось получить Minecraft-токен: {e}")))?;
     let profile = client.get("https://api.minecraftservices.com/minecraft/profile")
-        .bearer_auth(mc_token.access_token).send().await
+        .bearer_auth(mc_token.access_token.clone()).send().await
         .map_err(|e| auth_error(format!("Не удалось получить профиль Minecraft: {e}")))?;
     if !profile.status().is_success() {
         return Err(format!("Профиль Minecraft недоступен (HTTP {}). Возможно, у аккаунта нет профиля Java Edition.", profile.status()));
