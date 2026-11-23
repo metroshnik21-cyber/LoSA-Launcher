@@ -33,6 +33,8 @@ jobs:
         working-directory: ./losa-launcher
 
       - name: Build Windows installer
+        env:
+          LOSA_MICROSOFT_CLIENT_ID: ${{ vars.LOSA_MICROSOFT_CLIENT_ID }}
         run: npm run desktop:build
         working-directory: ./losa-launcher
 
