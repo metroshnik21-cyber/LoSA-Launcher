@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use sha1::Digest;
 use std::time::Duration;
 
 #[derive(Serialize)]
@@ -160,6 +161,104 @@ async fn complete_microsoft_login(client_id: String, device_code: String, interv
         .map_err(|e| auth_error(format!("Не удалось прочитать профиль Minecraft: {e}")))
 }
 
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct InstalledClientInfo {
+    version_id: String,
+    client_path: String,
+    metadata_path: String,
+    client_size: u64,
+}
+
+#[tauri::command]
+async fn install_vanilla_client(version_id: String) -> Result<InstalledClientInfo, String> {
+    let version_id = version_id.trim();
+    if version_id.is_empty() || !version_id.chars().all(|c| c.is_ascii_alphanumeric() || c == '.' || c == '-' || c == '_') {
+        return Err("Некорректный идентификатор версии Minecraft.".into());
+    }
+
+    let client = reqwest::Client::new();
+    let manifest_response = client
+        .get("https://piston-meta.mojang.com/mc/game/version_manifest_v2.json")
+        .send().await.map_err(|e| format!("Не удалось загрузить каталог Mojang: {e}"))?;
+    if !manifest_response.status().is_success() {
+        return Err(format!("Каталог Mojang вернул HTTP {}", manifest_response.status()));
+    }
+    let manifest: serde_json::Value = manifest_response.json().await
+        .map_err(|e| format!("Некорректный каталог Mojang: {e}"))?;
+    let entry = manifest.get("versions").and_then(|v| v.as_array())
+        .and_then(|versions| versions.iter().find(|v| v.get("id").and_then(|x| x.as_str()) == Some(version_id)))
+        .ok_or_else(|| format!("Версия Minecraft {version_id} отсутствует в официальном каталоге Mojang."))?;
+    let metadata_url = entry.get("url").and_then(|v| v.as_str())
+        .ok_or_else(|| "В каталоге отсутствует ссылка на метаданные версии.".to_string())?;
+    let parsed_metadata_url = reqwest::Url::parse(metadata_url)
+        .map_err(|_| "Mojang вернул некорректную ссылку на метаданные.".to_string())?;
+    if parsed_metadata_url.scheme() != "https" || !(parsed_metadata_url.host_str().unwrap_or("") == "mojang.com" || parsed_metadata_url.host_str().unwrap_or("").ends_with(".mojang.com")) {
+        return Err("Отклонена небезопасная ссылка на метаданные версии.".into());
+    }
+
+    let metadata_response = client.get(parsed_metadata_url).send().await
+        .map_err(|e| format!("Не удалось загрузить метаданные версии: {e}"))?;
+    if !metadata_response.status().is_success() {
+        return Err(format!("Метаданные версии вернули HTTP {}", metadata_response.status()));
+    }
+    let metadata_bytes = metadata_response.bytes().await
+        .map_err(|e| format!("Не удалось прочитать метаданные версии: {e}"))?;
+    let metadata: serde_json::Value = serde_json::from_slice(&metadata_bytes)
+        .map_err(|e| format!("Метаданные версии повреждены: {e}"))?;
+    let download = metadata.get("downloads").and_then(|v| v.get("client"))
+        .ok_or_else(|| "В метаданных этой версии нет клиентского файла.".to_string())?;
+    let client_url = download.get("url").and_then(|v| v.as_str())
+        .ok_or_else(|| "В метаданных отсутствует ссылка на клиент Minecraft.".to_string())?;
+    let expected_sha1 = download.get("sha1").and_then(|v| v.as_str())
+        .ok_or_else(|| "В метаданных отсутствует SHA-1 клиента.".to_string())?.to_ascii_lowercase();
+    let parsed_client_url = reqwest::Url::parse(client_url)
+        .map_err(|_| "Mojang вернул некорректную ссылку на клиент.".to_string())?;
+    if parsed_client_url.scheme() != "https" || !(parsed_client_url.host_str().unwrap_or("") == "mojang.com" || parsed_client_url.host_str().unwrap_or("").ends_with(".mojang.com")) {
+        return Err("Отклонена небезопасная ссылка на клиент Minecraft.".into());
+    }
+
+    let client_response = client.get(parsed_client_url).send().await
+        .map_err(|e| format!("Не удалось скачать клиент Minecraft: {e}"))?;
+    if !client_response.status().is_success() {
+        return Err(format!("Сервер загрузки клиента вернул HTTP {}", client_response.status()));
+    }
+    let client_bytes = client_response.bytes().await
+        .map_err(|e| format!("Ошибка чтения загруженного клиента: {e}"))?;
+    let actual_sha1 = format!("{:x}", sha1::Sha1::digest(&client_bytes));
+    if actual_sha1 != expected_sha1 {
+        return Err("Проверка целостности не пройдена: SHA-1 клиента не совпадает с каталогом Mojang. Файл не установлен.".into());
+    }
+
+    let app_data = std::env::var_os("APPDATA")
+        .map(std::path::PathBuf::from)
+        .ok_or_else(|| "Не найдена папка APPDATA Windows.".to_string())?;
+    let version_dir = app_data.join("L-o-S-A").join("versions").join(version_id);
+    std::fs::create_dir_all(&version_dir)
+        .map_err(|e| format!("Не удалось создать папку версии: {e}"))?;
+    let client_path = version_dir.join(format!("{version_id}.jar"));
+    let metadata_path = version_dir.join(format!("{version_id}.json"));
+    let temp_client = version_dir.join(format!("{version_id}.jar.download"));
+    std::fs::write(&temp_client, &client_bytes)
+        .map_err(|e| format!("Не удалось сохранить клиент: {e}"))?;
+    if client_path.exists() {
+        std::fs::remove_file(&client_path)
+            .map_err(|e| format!("Не удалось заменить предыдущий клиент: {e}"))?;
+    }
+    std::fs::rename(&temp_client, &client_path)
+        .map_err(|e| format!("Не удалось завершить установку клиента: {e}"))?;
+    std::fs::write(&metadata_path, &metadata_bytes)
+        .map_err(|e| format!("Клиент скачан, но не удалось сохранить метаданные: {e}"))?;
+
+    Ok(InstalledClientInfo {
+        version_id: version_id.to_string(),
+        client_path: client_path.to_string_lossy().to_string(),
+        metadata_path: metadata_path.to_string_lossy().to_string(),
+        client_size: client_bytes.len() as u64,
+    })
+}
+
 fn parse_java_major(output: &str) -> Option<u32> {
     let version = output.split('"').nth(1).unwrap_or(output);
     let first = version.split_whitespace().next()?;
@@ -198,7 +297,7 @@ fn detect_java() -> String {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
-        .invoke_handler(tauri::generate_handler![detect_java, start_microsoft_login, complete_microsoft_login])
+        .invoke_handler(tauri::generate_handler![detect_java, start_microsoft_login, complete_microsoft_login, install_vanilla_client])
         .run(tauri::generate_context!())
         .expect("error while running L.o.S.A.");
 }
