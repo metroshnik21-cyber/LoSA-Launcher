@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Home, Gamepad2, Users, Layers3, Server, Settings, Plus, Play, ChevronDown, Sparkles, CircleHelp, RefreshCw, MonitorDown } from "lucide-react";
+import { Home, Gamepad2, Users, Layers3, Server, Settings, Plus, Play, ChevronDown, Sparkles, ShieldCheck, CircleHelp, RefreshCw, MonitorDown } from "lucide-react";
 import { getMinecraftVersions, type MinecraftVersion } from "./lib/minecraft";
 import { invoke } from "@tauri-apps/api/core";
 
