@@ -175,6 +175,12 @@ fn minecraft_auth_status(auth_state: tauri::State<'_, std::sync::Mutex<Option<Mi
     auth_state.lock().ok().and_then(|session| session.as_ref().map(|s| s.profile.clone()))
 }
 
+#[tauri::command]
+fn logout_minecraft(auth_state: tauri::State<'_, std::sync::Mutex<Option<MinecraftAuthSession>>>) -> Result<(), String> {
+    *auth_state.lock().map_err(|_| "Не удалось завершить игровую сессию.".to_string())? = None;
+    Ok(())
+}
+
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -473,7 +479,7 @@ fn detect_java() -> String {
 pub fn run() {
     tauri::Builder::default()
         .manage(std::sync::Mutex::new(None::<MinecraftAuthSession>))
-        .invoke_handler(tauri::generate_handler![detect_java, start_microsoft_login, complete_microsoft_login, minecraft_auth_status, install_vanilla_client, install_minecraft_dependencies])
+        .invoke_handler(tauri::generate_handler![detect_java, start_microsoft_login, complete_microsoft_login, minecraft_auth_status, logout_minecraft, install_vanilla_client, install_minecraft_dependencies])
         .run(tauri::generate_context!())
         .expect("error while running L.o.S.A.");
 }
