@@ -299,7 +299,7 @@ async fn install_vanilla_client(version_id: String) -> Result<InstalledClientInf
 
 
 
-#[derive(Serialize)]
+#[derive(Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct DependencyInstallReport {
     version_id: String,
@@ -382,7 +382,7 @@ async fn install_minecraft_dependencies(version_id: String) -> Result<Dependency
         .map_err(|_| format!("Сначала установи клиент Minecraft {version_id}."))?;
     let metadata: serde_json::Value = serde_json::from_slice(&metadata_bytes)
         .map_err(|e| format!("Не удалось прочитать метаданные версии: {e}"))?;
-    let client = reqwest::Client::builder().user_agent("L.o.S.A. Launcher/0.7").build()
+    let client = reqwest::Client::builder().user_agent("L.o.S.A. Launcher/0.9.1").build()
         .map_err(|e| format!("Не удалось подготовить загрузчик: {e}"))?;
     let library_dir = root.join("libraries");
     let assets_dir = root.join("assets");
@@ -461,7 +461,14 @@ async fn install_minecraft_dependencies(version_id: String) -> Result<Dependency
         }
     }
 
-    Ok(DependencyInstallReport {
+    let mut required_files = Vec::with_capacity(library_jobs.len() + asset_jobs.len());
+    for (_, path, _) in library_jobs.iter().chain(asset_jobs.iter()) {
+        let relative = path.strip_prefix(&root)
+            .map_err(|_| "Не удалось подготовить список установленных файлов.".to_string())?;
+        required_files.push(relative.to_string_lossy().to_string());
+    }
+
+    let report = DependencyInstallReport {
         version_id: version_id.to_string(),
         libraries_downloaded,
         assets_downloaded,
@@ -469,7 +476,88 @@ async fn install_minecraft_dependencies(version_id: String) -> Result<Dependency
         bytes_downloaded,
         library_dir: library_dir.to_string_lossy().to_string(),
         assets_dir: assets_dir.to_string_lossy().to_string(),
-    })
+    };
+    let manifest = DependencyInstallManifest { report: report.clone(), files: required_files };
+    let manifest_path = version_dir.join("losa-dependencies.json");
+    let manifest_bytes = serde_json::to_vec_pretty(&manifest)
+        .map_err(|e| format!("Не удалось подготовить отметку установки: {e}"))?;
+    std::fs::write(&manifest_path, manifest_bytes)
+        .map_err(|e| format!("Не удалось сохранить состояние установки: {e}"))?;
+
+    Ok(report)
+}
+
+
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct DependencyInstallManifest {
+    report: DependencyInstallReport,
+    files: Vec<String>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct MinecraftInstallationStatus {
+    installed_client: Option<InstalledClientInfo>,
+    dependency_report: Option<DependencyInstallReport>,
+}
+
+#[tauri::command]
+fn get_minecraft_installation_status(version_id: String) -> Result<MinecraftInstallationStatus, String> {
+    let version_id = version_id.trim();
+    if version_id.is_empty() || !version_id.chars().next().is_some_and(|c| c.is_ascii_digit())
+        || !version_id.chars().all(|c| c.is_ascii_alphanumeric() || c == '.' || c == '-' || c == '_') {
+        return Err("Некорректный идентификатор версии Minecraft.".into());
+    }
+
+    let app_data = std::env::var_os("APPDATA").map(std::path::PathBuf::from)
+        .ok_or_else(|| "Не найдена папка APPDATA Windows.".to_string())?;
+    let root = app_data.join("L-o-S-A");
+    let version_dir = root.join("versions").join(version_id);
+    let metadata_path = version_dir.join(format!("{version_id}.json"));
+    let client_path = version_dir.join(format!("{version_id}.jar"));
+
+    let installed_client = if metadata_path.is_file() && client_path.is_file() {
+        let metadata_bytes = std::fs::read(&metadata_path)
+            .map_err(|e| format!("Не удалось проверить метаданные клиента: {e}"))?;
+        let metadata: serde_json::Value = serde_json::from_slice(&metadata_bytes)
+            .map_err(|e| format!("Метаданные Minecraft повреждены: {e}"))?;
+        let expected_sha1 = metadata.get("downloads").and_then(|v| v.get("client"))
+            .and_then(|v| v.get("sha1")).and_then(|v| v.as_str());
+        let client_bytes = std::fs::read(&client_path)
+            .map_err(|e| format!("Не удалось проверить клиентский файл: {e}"))?;
+        let checksum_valid = expected_sha1.map(|expected| {
+            format!("{:x}", sha1::Sha1::digest(&client_bytes)) == expected.to_ascii_lowercase()
+        }).unwrap_or(false);
+        if checksum_valid {
+            Some(InstalledClientInfo {
+                version_id: version_id.to_string(),
+                client_path: client_path.to_string_lossy().to_string(),
+                metadata_path: metadata_path.to_string_lossy().to_string(),
+                client_size: client_bytes.len() as u64,
+            })
+        } else {
+            None
+        }
+    } else {
+        None
+    };
+
+    let manifest_path = version_dir.join("losa-dependencies.json");
+    let dependency_report = if manifest_path.is_file() {
+        let bytes = std::fs::read(&manifest_path)
+            .map_err(|e| format!("Не удалось прочитать состояние библиотек: {e}"))?;
+        let manifest: DependencyInstallManifest = serde_json::from_slice(&bytes)
+            .map_err(|e| format!("Состояние установки повреждено: {e}"))?;
+        let all_files_present = manifest.report.version_id == version_id && manifest.files.iter().all(|relative| {
+            safe_relative_path(relative).map(|path| root.join(path).is_file()).unwrap_or(false)
+        });
+        if all_files_present { Some(manifest.report) } else { None }
+    } else {
+        None
+    };
+
+    Ok(MinecraftInstallationStatus { installed_client, dependency_report })
 }
 
 
@@ -582,7 +670,7 @@ async fn launch_minecraft(version_id: String, auth_state: tauri::State<'_, std::
     let asset_index = metadata.get("assetIndex").and_then(|v| v.get("id")).and_then(|v| v.as_str()).unwrap_or(version_id);
     let mut values = std::collections::HashMap::new();
     values.insert("natives_directory".into(), natives_dir.to_string_lossy().to_string());
-    values.insert("launcher_name".into(), "L.o.S.A.".into()); values.insert("launcher_version".into(), "0.8.0".into());
+    values.insert("launcher_name".into(), "L.o.S.A.".into()); values.insert("launcher_version".into(), "0.9.1".into());
     values.insert("classpath".into(), classpath.join(if cfg!(windows) { ";" } else { ":" }));
     values.insert("classpath_separator".into(), if cfg!(windows) { ";".into() } else { ":".into() });
     values.insert("auth_player_name".into(), session.profile.name.clone()); values.insert("version_name".into(), version_id.to_string());
@@ -660,7 +748,7 @@ fn detect_java() -> String {
 pub fn run() {
     tauri::Builder::default()
         .manage(std::sync::Mutex::new(None::<MinecraftAuthSession>))
-        .invoke_handler(tauri::generate_handler![detect_java, microsoft_auth_configured, start_microsoft_login, complete_microsoft_login, minecraft_auth_status, logout_minecraft, install_vanilla_client, install_minecraft_dependencies, launch_minecraft])
+        .invoke_handler(tauri::generate_handler![detect_java, microsoft_auth_configured, start_microsoft_login, complete_microsoft_login, minecraft_auth_status, logout_minecraft, install_vanilla_client, install_minecraft_dependencies, get_minecraft_installation_status, launch_minecraft])
         .run(tauri::generate_context!())
         .expect("error while running L.o.S.A.");
 }
