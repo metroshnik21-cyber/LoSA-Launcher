@@ -26,7 +26,6 @@ export default function App() {
   const [dependenciesBusy, setDependenciesBusy] = useState(false);
   const [launchBusy, setLaunchBusy] = useState(false);
   const [dependencyReport, setDependencyReport] = useState<{versionId:string;librariesDownloaded:number;librariesTotal:number;assetsDownloaded:number;assetsTotal:number;bytesDownloaded:number;libraryDir:string;assetsDir:string}|null>(null);
-  const authMode = "offline" as const;
   const [offlineName, setOfflineName] = useState(() => localStorage.getItem("losa.offlineName") ?? "");
   const [offlineNameDraft, setOfflineNameDraft] = useState(() => localStorage.getItem("losa.offlineName") ?? "");
   const saveOfflineProfile = () => {
@@ -36,7 +35,6 @@ export default function App() {
       return;
     }
     localStorage.setItem("losa.offlineName", name);
-    localStorage.setItem("losa.authMode", "offline");
     setOfflineName(name);
     setNotice("Локальный профиль " + name + " выбран.");
   };
@@ -84,17 +82,12 @@ export default function App() {
       setPage("Настройки");
       return;
     }
-    if (authMode === "microsoft" && !minecraftUser) {
-      setNotice("Сначала войди через Microsoft в разделе «Настройки».");
-      setPage("Настройки");
-      return;
-    }
     setLaunchBusy(true); setVersionsError("");
     try {
       const pid = await invoke<number>("launch_minecraft", {
         versionId: version,
-        authMode,
-        offlineName: authMode === "offline" ? offlineName : null
+        authMode: "offline",
+        offlineName
       });
       setNotice(`Minecraft ${version} запущен. PID процесса: ${pid}.`);
     } catch (error) {
