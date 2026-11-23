@@ -69,10 +69,18 @@ fn auth_error(message: impl Into<String>) -> String {
     message.into()
 }
 
+fn is_client_id_format(value: &str) -> bool {
+    let parts: Vec<&str> = value.split('-').collect();
+    parts.len() == 5
+        && [8, 4, 4, 4, 12].iter().zip(parts.iter())
+            .all(|(expected, part)| part.len() == *expected && part.chars().all(|c| c.is_ascii_hexdigit()))
+}
+
 fn microsoft_client_id() -> Result<&'static str, String> {
     option_env!("LOSA_MICROSOFT_CLIENT_ID")
-        .filter(|value| !value.trim().is_empty())
-        .ok_or_else(|| "Подключение Microsoft ещё не настроено разработчиком L.o.S.A.".to_string())
+        .map(str::trim)
+        .filter(|value| is_client_id_format(value))
+        .ok_or_else(|| "Microsoft-вход ещё не настроен: разработчику нужно указать настоящий Client ID приложения L.o.S.A.".to_string())
 }
 
 #[tauri::command]
