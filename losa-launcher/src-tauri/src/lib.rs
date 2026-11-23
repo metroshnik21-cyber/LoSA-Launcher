@@ -804,7 +804,7 @@ async fn launch_minecraft(version_id: String, auth_mode: String, offline_name: O
     let asset_index = metadata.get("assetIndex").and_then(|v| v.get("id")).and_then(|v| v.as_str()).unwrap_or(version_id);
     let mut values = std::collections::HashMap::new();
     values.insert("natives_directory".into(), natives_dir.to_string_lossy().to_string());
-    values.insert("launcher_name".into(), "L.o.S.A.".into()); values.insert("launcher_version".into(), "0.9.1".into());
+    values.insert("launcher_name".into(), "L.o.S.A.".into()); values.insert("launcher_version".into(), "0.9.2".into());
     values.insert("classpath".into(), classpath.join(if cfg!(windows) { ";" } else { ":" }));
     values.insert("classpath_separator".into(), if cfg!(windows) { ";".into() } else { ":".into() });
     values.insert("auth_player_name".into(), profile.name.clone()); values.insert("version_name".into(), version_id.to_string());
@@ -839,6 +839,13 @@ async fn launch_minecraft(version_id: String, auth_mode: String, offline_name: O
     command.args(&jvm_args).arg(main_class).args(&game_args).current_dir(&game_dir)
         .stdout(std::process::Stdio::from(log_file))
         .stderr(std::process::Stdio::from(stderr_file));
+    // Do not open a separate black console window for the Java child process on Windows.
+    // Minecraft output is already captured in the launch log above.
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::process::CommandExt;
+        command.creation_flags(0x08000000); // CREATE_NO_WINDOW
+    }
     let child = command.spawn().map_err(|e| format!("Minecraft не удалось запустить через Java: {e}. Журнал: {}", log_path.display()))?;
     Ok(child.id())
 }
