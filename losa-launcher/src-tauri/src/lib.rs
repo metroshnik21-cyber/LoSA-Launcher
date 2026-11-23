@@ -372,13 +372,27 @@ async fn install_minecraft_dependencies(version_id: String) -> Result<Dependency
     let mut library_jobs = Vec::new();
     if let Some(libraries) = metadata.get("libraries").and_then(|v| v.as_array()) {
         for library in libraries {
-            let Some(artifact) = library.get("downloads").and_then(|v| v.get("artifact")) else { continue };
-            let (Some(url), Some(path)) = (artifact.get("url").and_then(|v| v.as_str()), artifact.get("path").and_then(|v| v.as_str())) else { continue };
-            let url = trusted_download_url(url, &["libraries.minecraft.net", "repo.maven.apache.org", "repo1.maven.org"])?;
-            let relative = safe_relative_path(path)?;
-            let destination = library_dir.join(relative);
-            let sha = artifact.get("sha1").and_then(|v| v.as_str()).map(str::to_string);
-            library_jobs.push((url.to_string(), destination, sha));
+            if !library_rule_allows(library) { continue; }
+            if let Some(artifact) = library.get("downloads").and_then(|v| v.get("artifact")) {
+                if let (Some(url), Some(path)) = (artifact.get("url").and_then(|v| v.as_str()), artifact.get("path").and_then(|v| v.as_str())) {
+                    let url = trusted_download_url(url, &["libraries.minecraft.net", "repo.maven.apache.org", "repo1.maven.org"])?;
+                    let destination = library_dir.join(safe_relative_path(path)?);
+                    let sha = artifact.get("sha1").and_then(|v| v.as_str()).map(str::to_string);
+                    library_jobs.push((url.to_string(), destination, sha));
+                }
+            }
+            if let Some(native_key) = library.get("natives").and_then(|v| v.get("windows")).and_then(|v| v.as_str()) {
+                let arch = if std::mem::size_of::<usize>() == 8 { "64" } else { "32" };
+                let classifier = native_key.replace("${arch}", arch);
+                if let Some(native) = library.get("downloads").and_then(|v| v.get("classifiers")).and_then(|v| v.get(&classifier)) {
+                    if let (Some(url), Some(path)) = (native.get("url").and_then(|v| v.as_str()), native.get("path").and_then(|v| v.as_str())) {
+                        let url = trusted_download_url(url, &["libraries.minecraft.net", "repo.maven.apache.org", "repo1.maven.org"])?;
+                        let destination = library_dir.join(safe_relative_path(path)?);
+                        let sha = native.get("sha1").and_then(|v| v.as_str()).map(str::to_string);
+                        library_jobs.push((url.to_string(), destination, sha));
+                    }
+                }
+            }
         }
     }
     let mut bytes_downloaded = 0u64;
