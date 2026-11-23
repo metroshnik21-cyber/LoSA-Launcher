@@ -55,7 +55,7 @@ export default function App() {
       <div className="profile"><div className="avatar">S</div><div className="profile-copy"><b>Spark_Anvil</b><span>Локальный профиль</span></div><ChevronDown size={15}/></div>
       <div className="nav-label">БИБЛИОТЕКА</div>
       <nav>{nav.map(({name,icon:Icon}) => <button key={name} className={page===name?"nav-item selected":"nav-item"} onClick={()=>setPage(name)}><Icon size={18}/><span>{name}</span>{name==="Друзья" && <i>0</i>}</button>)}</nav>
-      <div className="sidebar-bottom"><div className="status-dot"/> Локальный режим <span className="version">v0.2.0</span></div>
+      <div className="sidebar-bottom"><div className="status-dot"/> Локальный режим <span className="version">v0.5.0</span></div>
     </aside>
     <main className="main">
       <header className="topbar"><div className="crumb">L.o.S.A. <span>/</span> {page}</div><button className="icon-button" title="Справка" onClick={()=>setNotice("L.o.S.A. — ранняя версия лаунчера. Некоторые разделы пока являются демонстрационными.")}><CircleHelp size={18}/></button></header>
