@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use sha1::Digest;
 use std::time::Duration;
 
 #[derive(Serialize)]
@@ -193,7 +194,7 @@ async fn install_vanilla_client(version_id: String) -> Result<InstalledClientInf
         .ok_or_else(|| "В каталоге отсутствует ссылка на метаданные версии.".to_string())?;
     let parsed_metadata_url = reqwest::Url::parse(metadata_url)
         .map_err(|_| "Mojang вернул некорректную ссылку на метаданные.".to_string())?;
-    if parsed_metadata_url.scheme() != "https" || !parsed_metadata_url.host_str().unwrap_or("").ends_with("mojang.com") {
+    if parsed_metadata_url.scheme() != "https" || !(parsed_metadata_url.host_str().unwrap_or("") == "mojang.com" || parsed_metadata_url.host_str().unwrap_or("").ends_with(".mojang.com")) {
         return Err("Отклонена небезопасная ссылка на метаданные версии.".into());
     }
 
@@ -214,7 +215,7 @@ async fn install_vanilla_client(version_id: String) -> Result<InstalledClientInf
         .ok_or_else(|| "В метаданных отсутствует SHA-1 клиента.".to_string())?.to_ascii_lowercase();
     let parsed_client_url = reqwest::Url::parse(client_url)
         .map_err(|_| "Mojang вернул некорректную ссылку на клиент.".to_string())?;
-    if parsed_client_url.scheme() != "https" || !parsed_client_url.host_str().unwrap_or("").ends_with("mojang.com") {
+    if parsed_client_url.scheme() != "https" || !(parsed_client_url.host_str().unwrap_or("") == "mojang.com" || parsed_client_url.host_str().unwrap_or("").ends_with(".mojang.com")) {
         return Err("Отклонена небезопасная ссылка на клиент Minecraft.".into());
     }
 
@@ -241,6 +242,10 @@ async fn install_vanilla_client(version_id: String) -> Result<InstalledClientInf
     let temp_client = version_dir.join(format!("{version_id}.jar.download"));
     std::fs::write(&temp_client, &client_bytes)
         .map_err(|e| format!("Не удалось сохранить клиент: {e}"))?;
+    if client_path.exists() {
+        std::fs::remove_file(&client_path)
+            .map_err(|e| format!("Не удалось заменить предыдущий клиент: {e}"))?;
+    }
     std::fs::rename(&temp_client, &client_path)
         .map_err(|e| format!("Не удалось завершить установку клиента: {e}"))?;
     std::fs::write(&metadata_path, &metadata_bytes)
