@@ -673,11 +673,11 @@ mod launcher_tests {
         values.insert("auth_player_name".to_string(), "PlayerOne".to_string());
         values.insert("version_name".to_string(), "1.21.4".to_string());
         assert_eq!(
-            expand_game_argument("--username=\${auth_player_name}", &values),
+            expand_game_argument("--username=${auth_player_name}", &values),
             "--username=PlayerOne"
         );
         assert_eq!(
-            expand_game_argument("\${version_name}", &values),
+            expand_game_argument("${version_name}", &values),
             "1.21.4"
         );
     }
