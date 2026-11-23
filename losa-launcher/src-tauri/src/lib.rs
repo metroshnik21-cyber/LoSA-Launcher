@@ -569,8 +569,13 @@ async fn launch_minecraft(version_id: String, auth_state: tauri::State<'_, std::
     values.insert("classpath_separator".into(), if cfg!(windows) { ";".into() } else { ":".into() });
     values.insert("auth_player_name".into(), session.profile.name.clone()); values.insert("version_name".into(), version_id.to_string());
     values.insert("game_directory".into(), game_dir.to_string_lossy().to_string()); values.insert("assets_root".into(), assets_root.to_string_lossy().to_string());
-    values.insert("assets_index_name".into(), asset_index.to_string()); values.insert("auth_uuid".into(), session.profile.id.clone());
+    values.insert("assets_index_name".into(), asset_index.to_string());
+    values.insert("game_assets".into(), assets_root.join("virtual").join(asset_index).to_string_lossy().to_string());
+    values.insert("auth_uuid".into(), session.profile.id.clone());
     values.insert("auth_access_token".into(), session.access_token.clone()); values.insert("user_type".into(), "msa".into());
+    values.insert("resolution_width".into(), "854".into()); values.insert("resolution_height".into(), "480".into());
+    values.insert("quickPlayPath".into(), String::new()); values.insert("quickPlaySingleplayer".into(), String::new());
+    values.insert("quickPlayMultiplayer".into(), String::new()); values.insert("quickPlayRealms".into(), String::new());
     values.insert("version_type".into(), metadata.get("type").and_then(|v| v.as_str()).unwrap_or("release").to_string());
     values.insert("user_properties".into(), "{}".into()); values.insert("clientid".into(), String::new()); values.insert("auth_xuid".into(), String::new());
     let mut jvm_args = Vec::new(); let mut game_args = Vec::new();
@@ -582,9 +587,16 @@ async fn launch_minecraft(version_id: String, auth_state: tauri::State<'_, std::
         if let Some(legacy) = metadata.get("minecraftArguments").and_then(|v| v.as_str()) { game_args.extend(legacy.split_whitespace().map(|v| expand_game_argument(v, &values))); }
         else { return Err("Не удалось прочитать параметры запуска этой версии Minecraft.".into()); }
     }
+    let logs_dir = root.join("logs");
+    std::fs::create_dir_all(&logs_dir).map_err(|e| format!("Не удалось создать папку журналов: {e}"))?;
+    let log_path = logs_dir.join(format!("minecraft-{version_id}-launch.log"));
+    let log_file = std::fs::File::create(&log_path).map_err(|e| format!("Не удалось создать журнал запуска: {e}"))?;
+    let stderr_file = log_file.try_clone().map_err(|e| format!("Не удалось подготовить журнал ошибок: {e}"))?;
     let mut command = std::process::Command::new(&java);
-    command.args(&jvm_args).arg(main_class).args(&game_args).current_dir(&game_dir);
-    let child = command.spawn().map_err(|e| format!("Minecraft не удалось запустить через Java: {e}"))?;
+    command.args(&jvm_args).arg(main_class).args(&game_args).current_dir(&game_dir)
+        .stdout(std::process::Stdio::from(log_file))
+        .stderr(std::process::Stdio::from(stderr_file));
+    let child = command.spawn().map_err(|e| format!("Minecraft не удалось запустить через Java: {e}. Журнал: {}", log_path.display()))?;
     Ok(child.id())
 }
 
