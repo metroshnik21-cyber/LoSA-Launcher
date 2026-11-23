@@ -462,6 +462,9 @@ async fn install_minecraft_dependencies(version_id: String) -> Result<Dependency
     }
 
     let mut required_files = Vec::with_capacity(library_jobs.len() + asset_jobs.len());
+    let index_relative = index_path.strip_prefix(&root)
+        .map_err(|_| "Не удалось подготовить путь индекса ресурсов.".to_string())?;
+    required_files.push(index_relative.to_string_lossy().to_string());
     for (_, path, _) in library_jobs.iter() {
         let relative = path.strip_prefix(&root)
             .map_err(|_| "Не удалось подготовить список установленных файлов.".to_string())?;
