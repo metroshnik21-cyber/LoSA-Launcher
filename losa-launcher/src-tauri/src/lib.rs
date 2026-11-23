@@ -631,3 +631,55 @@ pub fn run() {
         .run(tauri::generate_context!())
         .expect("error while running L.o.S.A.");
 }
+
+
+#[cfg(test)]
+mod launcher_tests {
+    use super::*;
+
+    #[test]
+    fn parses_java_versions() {
+        assert_eq!(parse_java_major("openjdk version \"1.8.0_402\""), Some(8));
+        assert_eq!(parse_java_major("openjdk version \"17.0.12\""), Some(17));
+        assert_eq!(parse_java_major("java version \"21.0.4\""), Some(21));
+    }
+
+    #[test]
+    fn rejects_unsafe_relative_paths() {
+        assert!(safe_relative_path("libraries/example.jar").is_ok());
+        assert!(safe_relative_path("../outside.jar").is_err());
+        assert!(safe_relative_path("C:\\\\Windows\\\\system.ini").is_err());
+        assert!(safe_relative_path("").is_err());
+    }
+
+    #[test]
+    fn expands_mojang_placeholders() {
+        let mut values = std::collections::HashMap::new();
+        values.insert("auth_player_name".to_string(), "PlayerOne".to_string());
+        values.insert("version_name".to_string(), "1.21.4".to_string());
+        assert_eq!(
+            expand_game_argument("--username=\${auth_player_name}", &values),
+            "--username=PlayerOne"
+        );
+        assert_eq!(
+            expand_game_argument("\${version_name}", &values),
+            "1.21.4"
+        );
+    }
+
+    #[test]
+    fn applies_windows_library_rules() {
+        let allowed: serde_json::Value = serde_json::json!({
+            "rules": [
+                {"action": "disallow", "os": {"name": "osx"}},
+                {"action": "allow", "os": {"name": "windows"}}
+            ]
+        });
+        let denied: serde_json::Value = serde_json::json!({
+            "rules": [{"action": "disallow", "os": {"name": "windows"}}]
+        });
+        assert!(library_rule_allows(&allowed));
+        assert!(!library_rule_allows(&denied));
+    }
+}
+
