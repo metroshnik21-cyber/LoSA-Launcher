@@ -15,7 +15,6 @@ on:
       - "feature/v0.9-authentication-foundation"
       - "feature/v0.9.1-install-state"
       - "feature/v0.9.2-offline-profiles"
-      - "feature/launcher-social-network-foundation"
     tags:
       - "v*"
 
