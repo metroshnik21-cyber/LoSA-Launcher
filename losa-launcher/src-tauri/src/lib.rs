@@ -276,7 +276,7 @@ struct DependencyInstallReport {
 fn trusted_download_url(raw: &str, allowed_hosts: &[&str]) -> Result<reqwest::Url, String> {
     let url = reqwest::Url::parse(raw).map_err(|_| "В метаданных обнаружена некорректная ссылка.".to_string())?;
     let host = url.host_str().unwrap_or("");
-    if url.scheme() != "https" || !allowed_hosts.iter().any(|allowed| host == *allowed || host.ends_with(&format!(".{allowed}"))) {
+    if url.scheme() != "https" || !allowed_hosts.iter().any(|allowed| host == *allowed || host.strip_suffix(*allowed).is_some_and(|prefix| prefix.ends_with('.'))) {
         return Err(format!("Отклонена небезопасная ссылка загрузки: {host}"));
     }
     Ok(url)
