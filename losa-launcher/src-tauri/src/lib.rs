@@ -304,6 +304,7 @@ async fn install_vanilla_client(version_id: String) -> Result<InstalledClientInf
 struct DependencyInstallReport {
     version_id: String,
     libraries_downloaded: usize,
+    libraries_total: usize,
     assets_downloaded: usize,
     assets_total: usize,
     bytes_downloaded: u64,
@@ -479,6 +480,7 @@ async fn install_minecraft_dependencies(version_id: String) -> Result<Dependency
     let report = DependencyInstallReport {
         version_id: version_id.to_string(),
         libraries_downloaded,
+        libraries_total: library_jobs.len(),
         assets_downloaded,
         assets_total,
         bytes_downloaded,
@@ -553,14 +555,14 @@ fn get_minecraft_installation_status(version_id: String) -> Result<MinecraftInst
 
     let manifest_path = version_dir.join("losa-dependencies.json");
     let dependency_report = if manifest_path.is_file() {
-        let bytes = std::fs::read(&manifest_path)
-            .map_err(|e| format!("Не удалось прочитать состояние библиотек: {e}"))?;
-        let manifest: DependencyInstallManifest = serde_json::from_slice(&bytes)
-            .map_err(|e| format!("Состояние установки повреждено: {e}"))?;
-        let all_files_present = manifest.report.version_id == version_id && manifest.files.iter().all(|relative| {
-            safe_relative_path(relative).map(|path| root.join(path).is_file()).unwrap_or(false)
-        });
-        if all_files_present { Some(manifest.report) } else { None }
+        std::fs::read(&manifest_path).ok()
+            .and_then(|bytes| serde_json::from_slice::<DependencyInstallManifest>(&bytes).ok())
+            .and_then(|manifest| {
+                let all_files_present = manifest.report.version_id == version_id && manifest.files.iter().all(|relative| {
+                    safe_relative_path(relative).map(|path| root.join(path).is_file()).unwrap_or(false)
+                });
+                if all_files_present { Some(manifest.report) } else { None }
+            })
     } else {
         None
     };
