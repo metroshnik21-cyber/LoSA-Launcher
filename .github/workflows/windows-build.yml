@@ -6,9 +6,12 @@ on:
   pull_request:
     branches:
       - "feature/v0.7-minecraft-dependencies"
+      - "feature/v0.8-minecraft-launch"
+      - "feature/v0.9-authentication-foundation"
   push:
     branches:
       - "feature/v0.8-minecraft-launch"
+      - "feature/v0.9-authentication-foundation"
     tags:
       - "v*"
 
@@ -33,6 +36,8 @@ jobs:
         working-directory: ./losa-launcher
 
       - name: Build Windows installer
+        env:
+          LOSA_MICROSOFT_CLIENT_ID: ${{ vars.LOSA_MICROSOFT_CLIENT_ID }}
         run: npm run desktop:build
         working-directory: ./losa-launcher
 
