@@ -134,7 +134,10 @@ async fn complete_microsoft_login(device_code: String, interval: u64, expires_in
             "slow_down" => { delay += 5; continue; }
             "authorization_declined" => return Err("Вход был отменён в окне Microsoft.".into()),
             "expired_token" => return Err("Код входа истёк. Начни заново.".into()),
-            other => return Err(format!("Microsoft OAuth: {}", if other.is_empty() { "неизвестная ошибка" } else { other })),
+            other => {
+                let description = body.get("error_description").and_then(|v| v.as_str()).unwrap_or("Microsoft не сообщил подробности.");
+                return Err(format!("Microsoft OAuth ({other}): {description}"));
+            },
         }
     };
     let xbox = client.post("https://user.auth.xboxlive.com/user/authenticate")
