@@ -613,7 +613,7 @@ fn detect_java() -> String {
 pub fn run() {
     tauri::Builder::default()
         .manage(std::sync::Mutex::new(None::<MinecraftAuthSession>))
-        .invoke_handler(tauri::generate_handler![detect_java, start_microsoft_login, complete_microsoft_login, minecraft_auth_status, logout_minecraft, install_vanilla_client, install_minecraft_dependencies])
+        .invoke_handler(tauri::generate_handler![detect_java, start_microsoft_login, complete_microsoft_login, minecraft_auth_status, logout_minecraft, install_vanilla_client, install_minecraft_dependencies, launch_minecraft])
         .run(tauri::generate_context!())
         .expect("error while running L.o.S.A.");
 }
