@@ -194,7 +194,7 @@ struct InstalledClientInfo {
 #[tauri::command]
 async fn install_vanilla_client(version_id: String) -> Result<InstalledClientInfo, String> {
     let version_id = version_id.trim();
-    if version_id.is_empty() || !version_id.chars().all(|c| c.is_ascii_alphanumeric() || c == '.' || c == '-' || c == '_') {
+    if version_id.is_empty() || !version_id.chars().next().is_some_and(|c| c.is_ascii_digit()) || !version_id.chars().all(|c| c.is_ascii_alphanumeric() || c == '.' || c == '-' || c == '_') {
         return Err("Некорректный идентификатор версии Minecraft.".into());
     }
 
@@ -352,7 +352,7 @@ async fn download_verified_file(
 #[tauri::command]
 async fn install_minecraft_dependencies(version_id: String) -> Result<DependencyInstallReport, String> {
     let version_id = version_id.trim();
-    if version_id.is_empty() || !version_id.chars().all(|c| c.is_ascii_alphanumeric() || c == '.' || c == '-' || c == '_') {
+    if version_id.is_empty() || !version_id.chars().next().is_some_and(|c| c.is_ascii_digit()) || !version_id.chars().all(|c| c.is_ascii_alphanumeric() || c == '.' || c == '-' || c == '_') {
         return Err("Некорректный идентификатор версии Minecraft.".into());
     }
     let app_data = std::env::var_os("APPDATA").map(std::path::PathBuf::from)
@@ -496,7 +496,7 @@ fn append_metadata_arguments(target: &mut Vec<String>, source: Option<&serde_jso
 #[tauri::command]
 async fn launch_minecraft(version_id: String, auth_state: tauri::State<'_, std::sync::Mutex<Option<MinecraftAuthSession>>>) -> Result<u32, String> {
     let version_id = version_id.trim();
-    if version_id.is_empty() || !version_id.chars().all(|c| c.is_ascii_alphanumeric() || c == '.' || c == '-' || c == '_') { return Err("Некорректный идентификатор версии Minecraft.".into()); }
+    if version_id.is_empty() || !version_id.chars().next().is_some_and(|c| c.is_ascii_digit()) || !version_id.chars().all(|c| c.is_ascii_alphanumeric() || c == '.' || c == '-' || c == '_') { return Err("Некорректный идентификатор версии Minecraft.".into()); }
     let session = auth_state.lock().map_err(|_| "Не удалось проверить игровую сессию.".to_string())?.clone()
         .ok_or_else(|| "Сначала войди через Microsoft в разделе «Настройки».".to_string())?;
     let app_data = std::env::var_os("APPDATA").map(std::path::PathBuf::from).ok_or_else(|| "Не найдена папка APPDATA Windows.".to_string())?;
