@@ -52,11 +52,17 @@ struct MinecraftLoginResponse {
     access_token: String,
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct MinecraftProfile {
     id: String,
     name: String,
+}
+
+#[derive(Clone)]
+struct MinecraftAuthSession {
+    access_token: String,
+    profile: MinecraftProfile,
 }
 
 fn auth_error(message: impl Into<String>) -> String {
@@ -86,7 +92,7 @@ async fn start_microsoft_login(client_id: String) -> Result<DeviceCodeInfo, Stri
 }
 
 #[tauri::command]
-async fn complete_microsoft_login(client_id: String, device_code: String, interval: u64, expires_in: u64) -> Result<MinecraftProfile, String> {
+async fn complete_microsoft_login(client_id: String, device_code: String, interval: u64, expires_in: u64, auth_state: tauri::State<'_, std::sync::Mutex<Option<MinecraftAuthSession>>>) -> Result<MinecraftProfile, String> {
     let client = reqwest::Client::new();
     let started = std::time::Instant::now();
     let mut delay = interval.max(5);
@@ -157,8 +163,16 @@ async fn complete_microsoft_login(client_id: String, device_code: String, interv
     if !profile.status().is_success() {
         return Err(format!("Профиль Minecraft недоступен (HTTP {}). Возможно, у аккаунта нет профиля Java Edition.", profile.status()));
     }
-    profile.json::<MinecraftProfile>().await
-        .map_err(|e| auth_error(format!("Не удалось прочитать профиль Minecraft: {e}")))
+    let profile = profile.json::<MinecraftProfile>().await
+        .map_err(|e| auth_error(format!("Не удалось прочитать профиль Minecraft: {e}")))?;
+    let session = MinecraftAuthSession { access_token: mc_token.access_token, profile: profile.clone() };
+    *auth_state.lock().map_err(|_| "Не удалось сохранить текущую игровую сессию.".to_string())? = Some(session);
+    Ok(profile)
+}
+
+#[tauri::command]
+fn minecraft_auth_status(auth_state: tauri::State<'_, std::sync::Mutex<Option<MinecraftAuthSession>>>) -> Option<MinecraftProfile> {
+    auth_state.lock().ok().and_then(|session| session.as_ref().map(|s| s.profile.clone()))
 }
 
 
@@ -458,7 +472,8 @@ fn detect_java() -> String {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
-        .invoke_handler(tauri::generate_handler![detect_java, start_microsoft_login, complete_microsoft_login, install_vanilla_client, install_minecraft_dependencies])
+        .manage(std::sync::Mutex::new(None::<MinecraftAuthSession>))
+        .invoke_handler(tauri::generate_handler![detect_java, start_microsoft_login, complete_microsoft_login, minecraft_auth_status, install_vanilla_client, install_minecraft_dependencies])
         .run(tauri::generate_context!())
         .expect("error while running L.o.S.A.");
 }
