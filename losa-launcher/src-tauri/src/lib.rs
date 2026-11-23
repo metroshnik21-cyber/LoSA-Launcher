@@ -69,21 +69,35 @@ fn auth_error(message: impl Into<String>) -> String {
     message.into()
 }
 
+fn microsoft_client_id() -> Result<&'static str, String> {
+    option_env!("LOSA_MICROSOFT_CLIENT_ID")
+        .filter(|value| !value.trim().is_empty())
+        .ok_or_else(|| "Подключение Microsoft ещё не настроено разработчиком L.o.S.A.".to_string())
+}
+
 #[tauri::command]
-async fn start_microsoft_login(client_id: String) -> Result<DeviceCodeInfo, String> {
-    if client_id.trim().is_empty() {
-        return Err("Сначала укажи Microsoft OAuth Client ID в настройках L.o.S.A.".into());
-    }
+fn microsoft_auth_configured() -> bool {
+    microsoft_client_id().is_ok()
+}
+
+#[tauri::command]
+async fn start_microsoft_login() -> Result<DeviceCodeInfo, String> {
+    let client_id = microsoft_client_id()?;
     let client = reqwest::Client::new();
     let response = client
         .post("https://login.microsoftonline.com/consumers/oauth2/v2.0/devicecode")
-        .form(&[("client_id", client_id.trim()), ("scope", "XboxLive.signin offline_access")])
+        .form(&[("client_id", client_id), ("scope", "XboxLive.signin offline_access")])
         .send().await.map_err(|e| auth_error(format!("Не удалось связаться с Microsoft: {e}")))?;
-    if !response.status().is_success() {
-        return Err(format!("Microsoft OAuth вернул HTTP {}", response.status()));
-    }
-    let data: DeviceCodeResponse = response.json().await
+    let status = response.status();
+    let body: serde_json::Value = response.json().await
         .map_err(|e| auth_error(format!("Не удалось прочитать ответ Microsoft: {e}")))?;
+    if !status.is_success() {
+        let code = body.get("error").and_then(|v| v.as_str()).unwrap_or("ошибка без кода");
+        let description = body.get("error_description").and_then(|v| v.as_str()).unwrap_or("Microsoft не сообщил подробности.");
+        return Err(format!("Microsoft отклонил запрос ({status}, {code}): {description}"));
+    }
+    let data: DeviceCodeResponse = serde_json::from_value(body)
+        .map_err(|e| auth_error(format!("Не удалось разобрать ответ Microsoft: {e}")))?;
     Ok(DeviceCodeInfo {
         device_code: data.device_code, user_code: data.user_code,
         verification_uri: data.verification_uri, message: data.message,
@@ -92,7 +106,8 @@ async fn start_microsoft_login(client_id: String) -> Result<DeviceCodeInfo, Stri
 }
 
 #[tauri::command]
-async fn complete_microsoft_login(client_id: String, device_code: String, interval: u64, expires_in: u64, auth_state: tauri::State<'_, std::sync::Mutex<Option<MinecraftAuthSession>>>) -> Result<MinecraftProfile, String> {
+async fn complete_microsoft_login(device_code: String, interval: u64, expires_in: u64, auth_state: tauri::State<'_, std::sync::Mutex<Option<MinecraftAuthSession>>>) -> Result<MinecraftProfile, String> {
+    let client_id = microsoft_client_id()?;
     let client = reqwest::Client::new();
     let started = std::time::Instant::now();
     let mut delay = interval.max(5);
@@ -104,7 +119,7 @@ async fn complete_microsoft_login(client_id: String, device_code: String, interv
         let response = client.post("https://login.microsoftonline.com/consumers/oauth2/v2.0/token")
             .form(&[
                 ("grant_type", "urn:ietf:params:oauth:grant-type:device_code"),
-                ("client_id", client_id.trim()), ("device_code", device_code.as_str()),
+                ("client_id", client_id), ("device_code", device_code.as_str()),
             ])
             .send().await.map_err(|e| auth_error(format!("Ошибка ожидания входа Microsoft: {e}")))?;
         let status = response.status();
@@ -642,7 +657,7 @@ fn detect_java() -> String {
 pub fn run() {
     tauri::Builder::default()
         .manage(std::sync::Mutex::new(None::<MinecraftAuthSession>))
-        .invoke_handler(tauri::generate_handler![detect_java, start_microsoft_login, complete_microsoft_login, minecraft_auth_status, logout_minecraft, install_vanilla_client, install_minecraft_dependencies, launch_minecraft])
+        .invoke_handler(tauri::generate_handler![detect_java, microsoft_auth_configured, start_microsoft_login, complete_microsoft_login, minecraft_auth_status, logout_minecraft, install_vanilla_client, install_minecraft_dependencies, launch_minecraft])
         .run(tauri::generate_context!())
         .expect("error while running L.o.S.A.");
 }
