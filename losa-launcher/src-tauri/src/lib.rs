@@ -52,11 +52,17 @@ struct MinecraftLoginResponse {
     access_token: String,
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct MinecraftProfile {
     id: String,
     name: String,
+}
+
+#[derive(Clone)]
+struct MinecraftAuthSession {
+    access_token: String,
+    profile: MinecraftProfile,
 }
 
 fn auth_error(message: impl Into<String>) -> String {
@@ -86,7 +92,7 @@ async fn start_microsoft_login(client_id: String) -> Result<DeviceCodeInfo, Stri
 }
 
 #[tauri::command]
-async fn complete_microsoft_login(client_id: String, device_code: String, interval: u64, expires_in: u64) -> Result<MinecraftProfile, String> {
+async fn complete_microsoft_login(client_id: String, device_code: String, interval: u64, expires_in: u64, auth_state: tauri::State<'_, std::sync::Mutex<Option<MinecraftAuthSession>>>) -> Result<MinecraftProfile, String> {
     let client = reqwest::Client::new();
     let started = std::time::Instant::now();
     let mut delay = interval.max(5);
@@ -152,13 +158,27 @@ async fn complete_microsoft_login(client_id: String, device_code: String, interv
     let mc_token: MinecraftLoginResponse = minecraft.json().await
         .map_err(|e| auth_error(format!("Не удалось получить Minecraft-токен: {e}")))?;
     let profile = client.get("https://api.minecraftservices.com/minecraft/profile")
-        .bearer_auth(mc_token.access_token).send().await
+        .bearer_auth(mc_token.access_token.clone()).send().await
         .map_err(|e| auth_error(format!("Не удалось получить профиль Minecraft: {e}")))?;
     if !profile.status().is_success() {
         return Err(format!("Профиль Minecraft недоступен (HTTP {}). Возможно, у аккаунта нет профиля Java Edition.", profile.status()));
     }
-    profile.json::<MinecraftProfile>().await
-        .map_err(|e| auth_error(format!("Не удалось прочитать профиль Minecraft: {e}")))
+    let profile = profile.json::<MinecraftProfile>().await
+        .map_err(|e| auth_error(format!("Не удалось прочитать профиль Minecraft: {e}")))?;
+    let session = MinecraftAuthSession { access_token: mc_token.access_token, profile: profile.clone() };
+    *auth_state.lock().map_err(|_| "Не удалось сохранить текущую игровую сессию.".to_string())? = Some(session);
+    Ok(profile)
+}
+
+#[tauri::command]
+fn minecraft_auth_status(auth_state: tauri::State<'_, std::sync::Mutex<Option<MinecraftAuthSession>>>) -> Option<MinecraftProfile> {
+    auth_state.lock().ok().and_then(|session| session.as_ref().map(|s| s.profile.clone()))
+}
+
+#[tauri::command]
+fn logout_minecraft(auth_state: tauri::State<'_, std::sync::Mutex<Option<MinecraftAuthSession>>>) -> Result<(), String> {
+    *auth_state.lock().map_err(|_| "Не удалось завершить игровую сессию.".to_string())? = None;
+    Ok(())
 }
 
 
@@ -174,7 +194,7 @@ struct InstalledClientInfo {
 #[tauri::command]
 async fn install_vanilla_client(version_id: String) -> Result<InstalledClientInfo, String> {
     let version_id = version_id.trim();
-    if version_id.is_empty() || !version_id.chars().all(|c| c.is_ascii_alphanumeric() || c == '.' || c == '-' || c == '_') {
+    if version_id.is_empty() || !version_id.chars().next().is_some_and(|c| c.is_ascii_digit()) || !version_id.chars().all(|c| c.is_ascii_alphanumeric() || c == '.' || c == '-' || c == '_') {
         return Err("Некорректный идентификатор версии Minecraft.".into());
     }
 
@@ -332,7 +352,7 @@ async fn download_verified_file(
 #[tauri::command]
 async fn install_minecraft_dependencies(version_id: String) -> Result<DependencyInstallReport, String> {
     let version_id = version_id.trim();
-    if version_id.is_empty() || !version_id.chars().all(|c| c.is_ascii_alphanumeric() || c == '.' || c == '-' || c == '_') {
+    if version_id.is_empty() || !version_id.chars().next().is_some_and(|c| c.is_ascii_digit()) || !version_id.chars().all(|c| c.is_ascii_alphanumeric() || c == '.' || c == '-' || c == '_') {
         return Err("Некорректный идентификатор версии Minecraft.".into());
     }
     let app_data = std::env::var_os("APPDATA").map(std::path::PathBuf::from)
@@ -352,13 +372,27 @@ async fn install_minecraft_dependencies(version_id: String) -> Result<Dependency
     let mut library_jobs = Vec::new();
     if let Some(libraries) = metadata.get("libraries").and_then(|v| v.as_array()) {
         for library in libraries {
-            let Some(artifact) = library.get("downloads").and_then(|v| v.get("artifact")) else { continue };
-            let (Some(url), Some(path)) = (artifact.get("url").and_then(|v| v.as_str()), artifact.get("path").and_then(|v| v.as_str())) else { continue };
-            let url = trusted_download_url(url, &["libraries.minecraft.net", "repo.maven.apache.org", "repo1.maven.org"])?;
-            let relative = safe_relative_path(path)?;
-            let destination = library_dir.join(relative);
-            let sha = artifact.get("sha1").and_then(|v| v.as_str()).map(str::to_string);
-            library_jobs.push((url.to_string(), destination, sha));
+            if !library_rule_allows(library) { continue; }
+            if let Some(artifact) = library.get("downloads").and_then(|v| v.get("artifact")) {
+                if let (Some(url), Some(path)) = (artifact.get("url").and_then(|v| v.as_str()), artifact.get("path").and_then(|v| v.as_str())) {
+                    let url = trusted_download_url(url, &["libraries.minecraft.net", "repo.maven.apache.org", "repo1.maven.org"])?;
+                    let destination = library_dir.join(safe_relative_path(path)?);
+                    let sha = artifact.get("sha1").and_then(|v| v.as_str()).map(str::to_string);
+                    library_jobs.push((url.to_string(), destination, sha));
+                }
+            }
+            if let Some(native_key) = library.get("natives").and_then(|v| v.get("windows")).and_then(|v| v.as_str()) {
+                let arch = if std::mem::size_of::<usize>() == 8 { "64" } else { "32" };
+                let classifier = native_key.replace("${arch}", arch);
+                if let Some(native) = library.get("downloads").and_then(|v| v.get("classifiers")).and_then(|v| v.get(&classifier)) {
+                    if let (Some(url), Some(path)) = (native.get("url").and_then(|v| v.as_str()), native.get("path").and_then(|v| v.as_str())) {
+                        let url = trusted_download_url(url, &["libraries.minecraft.net", "repo.maven.apache.org", "repo1.maven.org"])?;
+                        let destination = library_dir.join(safe_relative_path(path)?);
+                        let sha = native.get("sha1").and_then(|v| v.as_str()).map(str::to_string);
+                        library_jobs.push((url.to_string(), destination, sha));
+                    }
+                }
+            }
         }
     }
     let mut bytes_downloaded = 0u64;
@@ -420,6 +454,155 @@ async fn install_minecraft_dependencies(version_id: String) -> Result<Dependency
     })
 }
 
+
+fn library_rule_allows(library: &serde_json::Value) -> bool {
+    let Some(rules) = library.get("rules").and_then(|v| v.as_array()) else { return true };
+    let mut allowed = false;
+    for rule in rules {
+        let os_matches = rule.get("os").and_then(|v| v.get("name")).and_then(|v| v.as_str())
+            .map(|name| name == "windows").unwrap_or(true);
+        if os_matches { allowed = rule.get("action").and_then(|v| v.as_str()) == Some("allow"); }
+    }
+    allowed
+}
+fn expand_game_argument(raw: &str, values: &std::collections::HashMap<String, String>) -> String {
+    let mut result = raw.to_string();
+    for (key, value) in values { result = result.replace(&format!("${{{key}}}"), value); }
+    result
+}
+fn append_metadata_arguments(target: &mut Vec<String>, source: Option<&serde_json::Value>, values: &std::collections::HashMap<String, String>) {
+    let Some(items) = source.and_then(|v| v.as_array()) else { return };
+    for item in items {
+        let (allowed, raw_values) = if let Some(text) = item.as_str() { (true, vec![text.to_string()]) }
+        else if let Some(object) = item.as_object() {
+            let mut allowed = true;
+            if let Some(rules) = object.get("rules").and_then(|v| v.as_array()) {
+                allowed = false;
+                for rule in rules {
+                    let os_ok = rule.get("os").and_then(|v| v.get("name")).and_then(|v| v.as_str()).map(|name| name == "windows").unwrap_or(true);
+                    if os_ok { allowed = rule.get("action").and_then(|v| v.as_str()) == Some("allow"); }
+                }
+            }
+            let vals = match object.get("value") {
+                Some(serde_json::Value::String(s)) => vec![s.clone()],
+                Some(serde_json::Value::Array(a)) => a.iter().filter_map(|v| v.as_str().map(str::to_string)).collect(),
+                _ => Vec::new(),
+            };
+            (allowed, vals)
+        } else { (false, Vec::new()) };
+        if allowed { target.extend(raw_values.iter().map(|v| expand_game_argument(v, values))); }
+    }
+}
+#[tauri::command]
+async fn launch_minecraft(version_id: String, auth_state: tauri::State<'_, std::sync::Mutex<Option<MinecraftAuthSession>>>) -> Result<u32, String> {
+    let version_id = version_id.trim();
+    if version_id.is_empty() || !version_id.chars().next().is_some_and(|c| c.is_ascii_digit()) || !version_id.chars().all(|c| c.is_ascii_alphanumeric() || c == '.' || c == '-' || c == '_') { return Err("Некорректный идентификатор версии Minecraft.".into()); }
+    let session = auth_state.lock().map_err(|_| "Не удалось проверить игровую сессию.".to_string())?.clone()
+        .ok_or_else(|| "Сначала войди через Microsoft в разделе «Настройки».".to_string())?;
+    let app_data = std::env::var_os("APPDATA").map(std::path::PathBuf::from).ok_or_else(|| "Не найдена папка APPDATA Windows.".to_string())?;
+    let root = app_data.join("L-o-S-A");
+    let version_dir = root.join("versions").join(version_id);
+    let metadata_path = version_dir.join(format!("{version_id}.json"));
+    let metadata_bytes = std::fs::read(&metadata_path).map_err(|_| format!("Клиент Minecraft {version_id} не установлен. Сначала скачай клиент."))?;
+    let metadata: serde_json::Value = serde_json::from_slice(&metadata_bytes).map_err(|e| format!("Метаданные Minecraft повреждены: {e}"))?;
+    let client_jar = version_dir.join(format!("{version_id}.jar"));
+    if !client_jar.is_file() { return Err("Не найден клиентский JAR. Повтори установку клиента.".into()); }
+    #[cfg(target_os = "windows")]
+    let lookup = std::process::Command::new("where.exe").arg("java.exe").output();
+    #[cfg(not(target_os = "windows"))]
+    let lookup = std::process::Command::new("which").arg("java").output();
+    let java = lookup.ok().filter(|o| o.status.success()).and_then(|o| String::from_utf8_lossy(&o.stdout).lines().next().map(str::trim).filter(|s| !s.is_empty()).map(str::to_string))
+        .ok_or_else(|| "Java не найдена. Установи совместимую Java и добавь её в PATH.".to_string())?;
+    let java_output = std::process::Command::new(&java).arg("-version").output().map_err(|e| format!("Не удалось запустить Java ({java}): {e}"))?;
+    let java_text = format!("{}\n{}", String::from_utf8_lossy(&java_output.stdout), String::from_utf8_lossy(&java_output.stderr));
+    let java_major = parse_java_major(&java_text).ok_or_else(|| "Не удалось определить версию Java.".to_string())?;
+    let required_java = metadata.get("javaVersion").and_then(|v| v.get("majorVersion")).and_then(|v| v.as_u64()).map(|v| v as u32).unwrap_or_else(|| {
+        let parts: Vec<u32> = version_id.split('.').filter_map(|p| p.parse().ok()).collect();
+        if parts.first() == Some(&1) && parts.get(1).copied().unwrap_or(0) <= 16 { 8 } else if parts.first() == Some(&1) && parts.get(1) == Some(&17) { 16 } else { 17 }
+    });
+    if java_major < required_java { return Err(format!("Для Minecraft {version_id} нужна Java {required_java} или новее. Найдена Java {java_major}.")); }
+    let libraries_root = root.join("libraries");
+    let natives_dir = root.join("natives").join(format!("{version_id}-{}", std::process::id()));
+    std::fs::create_dir_all(&natives_dir).map_err(|e| format!("Не удалось создать папку natives: {e}"))?;
+    let mut classpath = Vec::<String>::new();
+    let libraries = metadata.get("libraries").and_then(|v| v.as_array()).ok_or_else(|| "В метаданных Minecraft отсутствует список библиотек.".to_string())?;
+    for library in libraries {
+        if !library_rule_allows(library) { continue; }
+        if let Some(artifact) = library.get("downloads").and_then(|v| v.get("artifact")) {
+            if let Some(path) = artifact.get("path").and_then(|v| v.as_str()) {
+                let file = libraries_root.join(safe_relative_path(path)?);
+                if file.is_file() { classpath.push(file.to_string_lossy().to_string()); }
+                else { return Err(format!("Не найдена библиотека {}. Нажми «Загрузить файлы» ещё раз.", path)); }
+            }
+        }
+        if let Some(native_key) = library.get("natives").and_then(|v| v.get("windows")).and_then(|v| v.as_str()) {
+            let arch = if std::mem::size_of::<usize>() == 8 { "64" } else { "32" };
+            let classifier = native_key.replace("${arch}", arch);
+            if let Some(native) = library.get("downloads").and_then(|v| v.get("classifiers")).and_then(|v| v.get(&classifier)) {
+                if let Some(path) = native.get("path").and_then(|v| v.as_str()) {
+                    let archive_path = libraries_root.join(safe_relative_path(path)?);
+                    if !archive_path.is_file() { return Err(format!("Не найден native-файл {}. Повтори загрузку библиотек.", path)); }
+                    let archive_file = std::fs::File::open(&archive_path).map_err(|e| format!("Не удалось открыть natives: {e}"))?;
+                    let mut archive = zip::ZipArchive::new(archive_file).map_err(|e| format!("Повреждён архив natives: {e}"))?;
+                    for index in 0..archive.len() {
+                        let mut entry = archive.by_index(index).map_err(|e| format!("Ошибка чтения natives: {e}"))?;
+                        let Some(relative) = entry.enclosed_name().map(|p| p.to_path_buf()) else { continue };
+                        if relative.to_string_lossy().starts_with("META-INF/") { continue; }
+                        let destination = natives_dir.join(relative);
+                        if let Some(parent) = destination.parent() { std::fs::create_dir_all(parent).map_err(|e| format!("Не удалось создать папку native-библиотеки: {e}"))?; }
+                        let mut output = std::fs::File::create(&destination).map_err(|e| format!("Не удалось распаковать native-библиотеку: {e}"))?;
+                        std::io::copy(&mut entry, &mut output).map_err(|e| format!("Ошибка распаковки native-библиотеки: {e}"))?;
+                    }
+                }
+            }
+        }
+    }
+    classpath.push(client_jar.to_string_lossy().to_string());
+    let game_dir = root.join("game");
+    std::fs::create_dir_all(&game_dir).map_err(|e| format!("Не удалось создать игровую папку: {e}"))?;
+    let assets_root = root.join("assets");
+    let asset_index = metadata.get("assetIndex").and_then(|v| v.get("id")).and_then(|v| v.as_str()).unwrap_or(version_id);
+    let mut values = std::collections::HashMap::new();
+    values.insert("natives_directory".into(), natives_dir.to_string_lossy().to_string());
+    values.insert("launcher_name".into(), "L.o.S.A.".into()); values.insert("launcher_version".into(), "0.8.0".into());
+    values.insert("classpath".into(), classpath.join(if cfg!(windows) { ";" } else { ":" }));
+    values.insert("classpath_separator".into(), if cfg!(windows) { ";".into() } else { ":".into() });
+    values.insert("auth_player_name".into(), session.profile.name.clone()); values.insert("version_name".into(), version_id.to_string());
+    values.insert("game_directory".into(), game_dir.to_string_lossy().to_string()); values.insert("assets_root".into(), assets_root.to_string_lossy().to_string());
+    values.insert("assets_index_name".into(), asset_index.to_string());
+    values.insert("game_assets".into(), assets_root.join("virtual").join(asset_index).to_string_lossy().to_string());
+    values.insert("auth_uuid".into(), session.profile.id.clone());
+    values.insert("auth_access_token".into(), session.access_token.clone()); values.insert("user_type".into(), "msa".into());
+    values.insert("resolution_width".into(), "854".into()); values.insert("resolution_height".into(), "480".into());
+    values.insert("quickPlayPath".into(), String::new()); values.insert("quickPlaySingleplayer".into(), String::new());
+    values.insert("quickPlayMultiplayer".into(), String::new()); values.insert("quickPlayRealms".into(), String::new());
+    values.insert("version_type".into(), metadata.get("type").and_then(|v| v.as_str()).unwrap_or("release").to_string());
+    values.insert("user_properties".into(), "{}".into()); values.insert("clientid".into(), String::new()); values.insert("auth_xuid".into(), String::new());
+    let mut jvm_args = Vec::new(); let mut game_args = Vec::new();
+    append_metadata_arguments(&mut jvm_args, metadata.get("arguments").and_then(|v| v.get("jvm")), &values);
+    append_metadata_arguments(&mut game_args, metadata.get("arguments").and_then(|v| v.get("game")), &values);
+    if jvm_args.is_empty() {
+        let defaults = ["-Xmx2G", "-Djava.library.path=${natives_directory}", "-cp", "${classpath}"];
+        jvm_args.extend(defaults.iter().map(|v| expand_game_argument(v, &values)));
+    }
+    let main_class = metadata.get("mainClass").and_then(|v| v.as_str()).ok_or_else(|| "В метаданных отсутствует mainClass.".to_string())?;
+    if metadata.get("arguments").and_then(|v| v.get("game")).is_none() {
+        if let Some(legacy) = metadata.get("minecraftArguments").and_then(|v| v.as_str()) { game_args.extend(legacy.split_whitespace().map(|v| expand_game_argument(v, &values))); }
+        else { return Err("Не удалось прочитать параметры запуска этой версии Minecraft.".into()); }
+    }
+    let logs_dir = root.join("logs");
+    std::fs::create_dir_all(&logs_dir).map_err(|e| format!("Не удалось создать папку журналов: {e}"))?;
+    let log_path = logs_dir.join(format!("minecraft-{version_id}-launch.log"));
+    let log_file = std::fs::File::create(&log_path).map_err(|e| format!("Не удалось создать журнал запуска: {e}"))?;
+    let stderr_file = log_file.try_clone().map_err(|e| format!("Не удалось подготовить журнал ошибок: {e}"))?;
+    let mut command = std::process::Command::new(&java);
+    command.args(&jvm_args).arg(main_class).args(&game_args).current_dir(&game_dir)
+        .stdout(std::process::Stdio::from(log_file))
+        .stderr(std::process::Stdio::from(stderr_file));
+    let child = command.spawn().map_err(|e| format!("Minecraft не удалось запустить через Java: {e}. Журнал: {}", log_path.display()))?;
+    Ok(child.id())
+}
+
 fn parse_java_major(output: &str) -> Option<u32> {
     let version = output.split('"').nth(1).unwrap_or(output);
     let first = version.split_whitespace().next()?;
@@ -458,7 +641,60 @@ fn detect_java() -> String {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
-        .invoke_handler(tauri::generate_handler![detect_java, start_microsoft_login, complete_microsoft_login, install_vanilla_client, install_minecraft_dependencies])
+        .manage(std::sync::Mutex::new(None::<MinecraftAuthSession>))
+        .invoke_handler(tauri::generate_handler![detect_java, start_microsoft_login, complete_microsoft_login, minecraft_auth_status, logout_minecraft, install_vanilla_client, install_minecraft_dependencies, launch_minecraft])
         .run(tauri::generate_context!())
         .expect("error while running L.o.S.A.");
 }
+
+
+#[cfg(test)]
+mod launcher_tests {
+    use super::*;
+
+    #[test]
+    fn parses_java_versions() {
+        assert_eq!(parse_java_major("openjdk version \"1.8.0_402\""), Some(8));
+        assert_eq!(parse_java_major("openjdk version \"17.0.12\""), Some(17));
+        assert_eq!(parse_java_major("java version \"21.0.4\""), Some(21));
+    }
+
+    #[test]
+    fn rejects_unsafe_relative_paths() {
+        assert!(safe_relative_path("libraries/example.jar").is_ok());
+        assert!(safe_relative_path("../outside.jar").is_err());
+        assert!(safe_relative_path("C:\\\\Windows\\\\system.ini").is_err());
+        assert!(safe_relative_path("").is_err());
+    }
+
+    #[test]
+    fn expands_mojang_placeholders() {
+        let mut values = std::collections::HashMap::new();
+        values.insert("auth_player_name".to_string(), "PlayerOne".to_string());
+        values.insert("version_name".to_string(), "1.21.4".to_string());
+        assert_eq!(
+            expand_game_argument("--username=${auth_player_name}", &values),
+            "--username=PlayerOne"
+        );
+        assert_eq!(
+            expand_game_argument("${version_name}", &values),
+            "1.21.4"
+        );
+    }
+
+    #[test]
+    fn applies_windows_library_rules() {
+        let allowed: serde_json::Value = serde_json::json!({
+            "rules": [
+                {"action": "disallow", "os": {"name": "osx"}},
+                {"action": "allow", "os": {"name": "windows"}}
+            ]
+        });
+        let denied: serde_json::Value = serde_json::json!({
+            "rules": [{"action": "disallow", "os": {"name": "windows"}}]
+        });
+        assert!(library_rule_allows(&allowed));
+        assert!(!library_rule_allows(&denied));
+    }
+}
+

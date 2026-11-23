@@ -3,7 +3,12 @@ name: L.o.S.A. Windows Build
 
 on:
   workflow_dispatch:
+  pull_request:
+    branches:
+      - "feature/v0.7-minecraft-dependencies"
   push:
+    branches:
+      - "feature/v0.8-minecraft-launch"
     tags:
       - "v*"
 
