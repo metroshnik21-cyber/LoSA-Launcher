@@ -467,7 +467,7 @@ fn library_rule_allows(library: &serde_json::Value) -> bool {
 }
 fn expand_game_argument(raw: &str, values: &std::collections::HashMap<String, String>) -> String {
     let mut result = raw.to_string();
-    for (key, value) in values { result = result.replace(&format!("\${{{key}}}"), value); }
+    for (key, value) in values { result = result.replace(&format!("${{{key}}}"), value); }
     result
 }
 fn append_metadata_arguments(target: &mut Vec<String>, source: Option<&serde_json::Value>, values: &std::collections::HashMap<String, String>) {
@@ -537,7 +537,7 @@ async fn launch_minecraft(version_id: String, auth_state: tauri::State<'_, std::
         }
         if let Some(native_key) = library.get("natives").and_then(|v| v.get("windows")).and_then(|v| v.as_str()) {
             let arch = if std::mem::size_of::<usize>() == 8 { "64" } else { "32" };
-            let classifier = native_key.replace("\${arch}", arch);
+            let classifier = native_key.replace("${arch}", arch);
             if let Some(native) = library.get("downloads").and_then(|v| v.get("classifiers")).and_then(|v| v.get(&classifier)) {
                 if let Some(path) = native.get("path").and_then(|v| v.as_str()) {
                     let archive_path = libraries_root.join(safe_relative_path(path)?);
@@ -576,7 +576,7 @@ async fn launch_minecraft(version_id: String, auth_state: tauri::State<'_, std::
     let mut jvm_args = Vec::new(); let mut game_args = Vec::new();
     append_metadata_arguments(&mut jvm_args, metadata.get("arguments").and_then(|v| v.get("jvm")), &values);
     append_metadata_arguments(&mut game_args, metadata.get("arguments").and_then(|v| v.get("game")), &values);
-    if jvm_args.is_empty() { jvm_args.extend(["-Xmx2G".into(), "-Djava.library.path=\${natives_directory}".into(), "-cp".into(), "\${classpath}".into()].iter().map(|v| expand_game_argument(v, &values))); }
+    if jvm_args.is_empty() { jvm_args.extend(["-Xmx2G".into(), "-Djava.library.path=${natives_directory}".into(), "-cp".into(), "${classpath}".into()].iter().map(|v| expand_game_argument(v, &values))); }
     let main_class = metadata.get("mainClass").and_then(|v| v.as_str()).ok_or_else(|| "В метаданных отсутствует mainClass.".to_string())?;
     if metadata.get("arguments").and_then(|v| v.get("game")).is_none() {
         if let Some(legacy) = metadata.get("minecraftArguments").and_then(|v| v.as_str()) { game_args.extend(legacy.split_whitespace().map(|v| expand_game_argument(v, &values))); }
