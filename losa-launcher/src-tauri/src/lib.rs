@@ -259,6 +259,167 @@ async fn install_vanilla_client(version_id: String) -> Result<InstalledClientInf
     })
 }
 
+
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct DependencyInstallReport {
+    version_id: String,
+    libraries_downloaded: usize,
+    assets_downloaded: usize,
+    assets_total: usize,
+    bytes_downloaded: u64,
+    library_dir: String,
+    assets_dir: String,
+}
+
+fn trusted_download_url(raw: &str, allowed_hosts: &[&str]) -> Result<reqwest::Url, String> {
+    let url = reqwest::Url::parse(raw).map_err(|_| "В метаданных обнаружена некорректная ссылка.".to_string())?;
+    let host = url.host_str().unwrap_or("");
+    if url.scheme() != "https" || !allowed_hosts.iter().any(|allowed| host == *allowed || host.strip_suffix(*allowed).is_some_and(|prefix| prefix.ends_with('.'))) {
+        return Err(format!("Отклонена небезопасная ссылка загрузки: {host}"));
+    }
+    Ok(url)
+}
+
+fn safe_relative_path(raw: &str) -> Result<std::path::PathBuf, String> {
+    let path = std::path::Path::new(raw);
+    if raw.is_empty() || path.is_absolute() || path.components().any(|c| !matches!(c, std::path::Component::Normal(_))) {
+        return Err("Метаданные содержат небезопасный путь файла.".into());
+    }
+    Ok(path.to_path_buf())
+}
+
+async fn download_verified_file(
+    client: &reqwest::Client,
+    url: &str,
+    destination: &std::path::Path,
+    expected_sha1: Option<&str>,
+) -> Result<u64, String> {
+    if destination.is_file() {
+        if let Some(expected) = expected_sha1 {
+            let existing = std::fs::read(destination).map_err(|e| format!("Не удалось проверить файл: {e}"))?;
+            if format!("{:x}", sha1::Sha1::digest(&existing)) == expected.to_ascii_lowercase() {
+                return Ok(0);
+            }
+        } else {
+            return Ok(0);
+        }
+    }
+    let response = client.get(url).send().await.map_err(|e| format!("Ошибка загрузки файла: {e}"))?;
+    if !response.status().is_success() {
+        return Err(format!("Сервер загрузки вернул HTTP {}", response.status()));
+    }
+    let bytes = response.bytes().await.map_err(|e| format!("Не удалось прочитать файл: {e}"))?;
+    if let Some(expected) = expected_sha1 {
+        let actual = format!("{:x}", sha1::Sha1::digest(&bytes));
+        if actual != expected.to_ascii_lowercase() {
+            return Err("SHA-1 загруженного файла не совпадает с официальными метаданными.".into());
+        }
+    }
+    if let Some(parent) = destination.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| format!("Не удалось создать папку загрузки: {e}"))?;
+    }
+    let temp = destination.with_extension("losa-download");
+    std::fs::write(&temp, &bytes).map_err(|e| format!("Не удалось сохранить временный файл: {e}"))?;
+    if destination.exists() {
+        std::fs::remove_file(destination).map_err(|e| format!("Не удалось заменить старый файл: {e}"))?;
+    }
+    std::fs::rename(&temp, destination).map_err(|e| format!("Не удалось завершить сохранение файла: {e}"))?;
+    Ok(bytes.len() as u64)
+}
+
+#[tauri::command]
+async fn install_minecraft_dependencies(version_id: String) -> Result<DependencyInstallReport, String> {
+    let version_id = version_id.trim();
+    if version_id.is_empty() || !version_id.chars().all(|c| c.is_ascii_alphanumeric() || c == '.' || c == '-' || c == '_') {
+        return Err("Некорректный идентификатор версии Minecraft.".into());
+    }
+    let app_data = std::env::var_os("APPDATA").map(std::path::PathBuf::from)
+        .ok_or_else(|| "Не найдена папка APPDATA Windows.".to_string())?;
+    let root = app_data.join("L-o-S-A");
+    let version_dir = root.join("versions").join(version_id);
+    let metadata_path = version_dir.join(format!("{version_id}.json"));
+    let metadata_bytes = std::fs::read(&metadata_path)
+        .map_err(|_| format!("Сначала установи клиент Minecraft {version_id}."))?;
+    let metadata: serde_json::Value = serde_json::from_slice(&metadata_bytes)
+        .map_err(|e| format!("Не удалось прочитать метаданные версии: {e}"))?;
+    let client = reqwest::Client::builder().user_agent("L.o.S.A. Launcher/0.7").build()
+        .map_err(|e| format!("Не удалось подготовить загрузчик: {e}"))?;
+    let library_dir = root.join("libraries");
+    let assets_dir = root.join("assets");
+
+    let mut library_jobs = Vec::new();
+    if let Some(libraries) = metadata.get("libraries").and_then(|v| v.as_array()) {
+        for library in libraries {
+            let Some(artifact) = library.get("downloads").and_then(|v| v.get("artifact")) else { continue };
+            let (Some(url), Some(path)) = (artifact.get("url").and_then(|v| v.as_str()), artifact.get("path").and_then(|v| v.as_str())) else { continue };
+            let url = trusted_download_url(url, &["libraries.minecraft.net", "repo.maven.apache.org", "repo1.maven.org"])?;
+            let relative = safe_relative_path(path)?;
+            let destination = library_dir.join(relative);
+            let sha = artifact.get("sha1").and_then(|v| v.as_str()).map(str::to_string);
+            library_jobs.push((url.to_string(), destination, sha));
+        }
+    }
+    let mut bytes_downloaded = 0u64;
+    let mut libraries_downloaded = 0usize;
+    for batch in library_jobs.chunks(12) {
+        let jobs = batch.iter().cloned().map(|(url, path, sha)| {
+            let client = client.clone();
+            async move { download_verified_file(&client, &url, &path, sha.as_deref()).await }
+        });
+        let results = futures_util::future::join_all(jobs).await;
+        for result in results {
+            let bytes = result?;
+            if bytes > 0 { libraries_downloaded += 1; bytes_downloaded += bytes; }
+        }
+    }
+
+    let asset_index = metadata.get("assetIndex").ok_or_else(|| "В метаданных версии нет assetIndex.".to_string())?;
+    let index_id = asset_index.get("id").and_then(|v| v.as_str()).ok_or_else(|| "Не найден идентификатор индекса ресурсов.".to_string())?;
+    let index_url = asset_index.get("url").and_then(|v| v.as_str()).ok_or_else(|| "Не найдена ссылка на индекс ресурсов.".to_string())?;
+    let index_url = trusted_download_url(index_url, &["piston-meta.mojang.com", "launcher.mojang.com"])?;
+    let index_path = assets_dir.join("indexes").join(format!("{index_id}.json"));
+    bytes_downloaded += download_verified_file(&client, index_url.as_str(), &index_path, asset_index.get("sha1").and_then(|v| v.as_str())).await?;
+    let index_bytes = std::fs::read(&index_path).map_err(|e| format!("Не удалось прочитать индекс ресурсов: {e}"))?;
+    let index: serde_json::Value = serde_json::from_slice(&index_bytes).map_err(|e| format!("Индекс ресурсов повреждён: {e}"))?;
+    let objects = index.get("objects").and_then(|v| v.as_object()).ok_or_else(|| "В индексе ресурсов нет списка файлов.".to_string())?;
+    let mut asset_jobs = Vec::new();
+    for object in objects.values() {
+        let hash = object.get("hash").and_then(|v| v.as_str()).ok_or_else(|| "В индексе найден ресурс без хеша.".to_string())?;
+        if hash.len() != 40 || !hash.chars().all(|c| c.is_ascii_hexdigit()) {
+            return Err("Индекс ресурсов содержит некорректный SHA-1.".into());
+        }
+        let prefix = &hash[..2];
+        let url = format!("https://resources.download.minecraft.net/{prefix}/{hash}");
+        let destination = assets_dir.join("objects").join(prefix).join(hash);
+        asset_jobs.push((url, destination, hash.to_string()));
+    }
+    let assets_total = asset_jobs.len();
+    let mut assets_downloaded = 0usize;
+    for batch in asset_jobs.chunks(12) {
+        let jobs = batch.iter().cloned().map(|(url, path, sha)| {
+            let client = client.clone();
+            async move { download_verified_file(&client, &url, &path, Some(&sha)).await }
+        });
+        let results = futures_util::future::join_all(jobs).await;
+        for result in results {
+            let bytes = result?;
+            if bytes > 0 { assets_downloaded += 1; bytes_downloaded += bytes; }
+        }
+    }
+
+    Ok(DependencyInstallReport {
+        version_id: version_id.to_string(),
+        libraries_downloaded,
+        assets_downloaded,
+        assets_total,
+        bytes_downloaded,
+        library_dir: library_dir.to_string_lossy().to_string(),
+        assets_dir: assets_dir.to_string_lossy().to_string(),
+    })
+}
+
 fn parse_java_major(output: &str) -> Option<u32> {
     let version = output.split('"').nth(1).unwrap_or(output);
     let first = version.split_whitespace().next()?;
@@ -297,7 +458,7 @@ fn detect_java() -> String {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
-        .invoke_handler(tauri::generate_handler![detect_java, start_microsoft_login, complete_microsoft_login, install_vanilla_client])
+        .invoke_handler(tauri::generate_handler![detect_java, start_microsoft_login, complete_microsoft_login, install_vanilla_client, install_minecraft_dependencies])
         .run(tauri::generate_context!())
         .expect("error while running L.o.S.A.");
 }
