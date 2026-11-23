@@ -607,6 +607,97 @@ fn library_rule_allows(library: &serde_json::Value) -> bool {
     }
     allowed
 }
+
+fn java_major_at(path: &std::path::Path) -> Option<u32> {
+    let output = std::process::Command::new(path).arg("-version").output().ok()?;
+    let text = format!("{}\n{}", String::from_utf8_lossy(&output.stdout), String::from_utf8_lossy(&output.stderr));
+    parse_java_major(&text)
+}
+
+fn find_java_executable(directory: &std::path::Path) -> Option<std::path::PathBuf> {
+    let direct = directory.join("bin").join("java.exe");
+    if direct.is_file() { return Some(direct); }
+    let entries = std::fs::read_dir(directory).ok()?;
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.is_dir() {
+            if let Some(found) = find_java_executable(&path) { return Some(found); }
+        }
+    }
+    None
+}
+
+async fn ensure_java_runtime(required_major: u32, root: &std::path::Path) -> Result<std::path::PathBuf, String> {
+    #[cfg(target_os = "windows")]
+    let lookup = std::process::Command::new("where.exe").arg("java.exe").output();
+    #[cfg(not(target_os = "windows"))]
+    let lookup = std::process::Command::new("which").arg("java").output();
+
+    if let Some(system_java) = lookup.ok().filter(|o| o.status.success())
+        .and_then(|o| String::from_utf8_lossy(&o.stdout).lines().next().map(str::trim).filter(|s| !s.is_empty()).map(std::path::PathBuf::from)) {
+        if java_major_at(&system_java).is_some_and(|major| major >= required_major) {
+            return Ok(system_java);
+        }
+    }
+
+    let runtime_major = if required_major == 16 { 17 } else { required_major };
+    let runtime_dir = root.join("runtime").join(format!("java-{runtime_major}"));
+    if let Some(java) = find_java_executable(&runtime_dir) {
+        if java_major_at(&java).is_some_and(|major| major >= required_major) { return Ok(java); }
+    }
+
+    let url = format!("https://api.adoptium.net/v3/binary/latest/{runtime_major}/ga/windows/x64/jre/hotspot/normal/eclipse");
+    let client = reqwest::Client::builder().user_agent("L.o.S.A. Launcher").build()
+        .map_err(|e| format!("Не удалось подготовить загрузку Java: {e}"))?;
+    let response = client.get(&url).send().await
+        .map_err(|e| format!("Не удалось скачать Java {runtime_major}: {e}"))?;
+    if !response.status().is_success() {
+        return Err(format!("Сервис Java вернул HTTP {} для версии {runtime_major}.", response.status()));
+    }
+    let archive_bytes = response.bytes().await
+        .map_err(|e| format!("Не удалось прочитать архив Java: {e}"))?;
+    if archive_bytes.len() > 300 * 1024 * 1024 {
+        return Err("Архив Java неожиданно большой; установка остановлена.".into());
+    }
+
+    let runtime_parent = root.join("runtime");
+    std::fs::create_dir_all(&runtime_parent).map_err(|e| format!("Не удалось создать папку Java: {e}"))?;
+    let temp_dir = runtime_parent.join(format!("java-{runtime_major}.installing"));
+    if temp_dir.exists() { std::fs::remove_dir_all(&temp_dir).map_err(|e| format!("Не удалось очистить временную папку Java: {e}"))?; }
+    std::fs::create_dir_all(&temp_dir).map_err(|e| format!("Не удалось подготовить установку Java: {e}"))?;
+    let extraction = (|| -> Result<(), String> {
+        let cursor = std::io::Cursor::new(archive_bytes);
+        let mut archive = zip::ZipArchive::new(cursor).map_err(|e| format!("Архив Java повреждён: {e}"))?;
+        for index in 0..archive.len() {
+            let mut entry = archive.by_index(index).map_err(|e| format!("Не удалось прочитать архив Java: {e}"))?;
+            let Some(relative) = entry.enclosed_name().map(|p| p.to_path_buf()) else { continue };
+            if entry.unix_mode().is_some_and(|mode| mode & 0o170000 == 0o120000) { continue; }
+            let destination = temp_dir.join(relative);
+            if entry.is_dir() {
+                std::fs::create_dir_all(&destination).map_err(|e| format!("Не удалось создать папку Java: {e}"))?;
+            } else {
+                if let Some(parent) = destination.parent() { std::fs::create_dir_all(parent).map_err(|e| format!("Не удалось создать папку Java: {e}"))?; }
+                let mut output = std::fs::File::create(&destination).map_err(|e| format!("Не удалось сохранить файл Java: {e}"))?;
+                std::io::copy(&mut entry, &mut output).map_err(|e| format!("Не удалось распаковать Java: {e}"))?;
+            }
+        }
+        Ok(())
+    })();
+    if let Err(error) = extraction {
+        let _ = std::fs::remove_dir_all(&temp_dir);
+        return Err(error);
+    }
+    let java = find_java_executable(&temp_dir)
+        .ok_or_else(|| "В архиве Java не найден java.exe.".to_string())?;
+    if !java_major_at(&java).is_some_and(|major| major >= required_major) {
+        let _ = std::fs::remove_dir_all(&temp_dir);
+        return Err("Загруженная Java не прошла проверку версии.".into());
+    }
+    if runtime_dir.exists() { std::fs::remove_dir_all(&runtime_dir).map_err(|e| format!("Не удалось заменить старую Java: {e}"))?; }
+    std::fs::rename(&temp_dir, &runtime_dir).map_err(|e| format!("Не удалось завершить установку Java: {e}"))?;
+    find_java_executable(&runtime_dir).ok_or_else(|| "Java установлена, но java.exe не найден.".into())
+}
+
 fn expand_game_argument(raw: &str, values: &std::collections::HashMap<String, String>) -> String {
     let mut result = raw.to_string();
     for (key, value) in values { result = result.replace(&format!("${{{key}}}"), value); }
@@ -663,19 +754,12 @@ async fn launch_minecraft(version_id: String, auth_mode: String, offline_name: O
     let metadata: serde_json::Value = serde_json::from_slice(&metadata_bytes).map_err(|e| format!("Метаданные Minecraft повреждены: {e}"))?;
     let client_jar = version_dir.join(format!("{version_id}.jar"));
     if !client_jar.is_file() { return Err("Не найден клиентский JAR. Повтори установку клиента.".into()); }
-    #[cfg(target_os = "windows")]
-    let lookup = std::process::Command::new("where.exe").arg("java.exe").output();
-    #[cfg(not(target_os = "windows"))]
-    let lookup = std::process::Command::new("which").arg("java").output();
-    let java = lookup.ok().filter(|o| o.status.success()).and_then(|o| String::from_utf8_lossy(&o.stdout).lines().next().map(str::trim).filter(|s| !s.is_empty()).map(str::to_string))
-        .ok_or_else(|| "Java не найдена. Установи совместимую Java и добавь её в PATH.".to_string())?;
-    let java_output = std::process::Command::new(&java).arg("-version").output().map_err(|e| format!("Не удалось запустить Java ({java}): {e}"))?;
-    let java_text = format!("{}\n{}", String::from_utf8_lossy(&java_output.stdout), String::from_utf8_lossy(&java_output.stderr));
-    let java_major = parse_java_major(&java_text).ok_or_else(|| "Не удалось определить версию Java.".to_string())?;
     let required_java = metadata.get("javaVersion").and_then(|v| v.get("majorVersion")).and_then(|v| v.as_u64()).map(|v| v as u32).unwrap_or_else(|| {
         let parts: Vec<u32> = version_id.split('.').filter_map(|p| p.parse().ok()).collect();
         if parts.first() == Some(&1) && parts.get(1).copied().unwrap_or(0) <= 16 { 8 } else if parts.first() == Some(&1) && parts.get(1) == Some(&17) { 16 } else { 17 }
     });
+    let java = ensure_java_runtime(required_java, &root).await?;
+    let java_major = java_major_at(&java).ok_or_else(|| "Не удалось проверить установленную Java.".to_string())?;
     if java_major < required_java { return Err(format!("Для Minecraft {version_id} нужна Java {required_java} или новее. Найдена Java {java_major}.")); }
     let libraries_root = root.join("libraries");
     let natives_dir = root.join("natives").join(format!("{version_id}-{}", std::process::id()));
