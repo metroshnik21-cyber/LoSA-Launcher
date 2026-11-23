@@ -11,6 +11,7 @@ on:
   push:
     branches:
       - "feature/v0.8-minecraft-launch"
+      - "feature/v0.9-authentication-foundation"
     tags:
       - "v*"
 
