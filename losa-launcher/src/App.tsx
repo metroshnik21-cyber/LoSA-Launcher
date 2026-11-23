@@ -25,7 +25,7 @@ export default function App() {
   const [installedClient, setInstalledClient] = useState<{versionId:string;clientPath:string;metadataPath:string;clientSize:number}|null>(null);
   const [dependenciesBusy, setDependenciesBusy] = useState(false);
   const [launchBusy, setLaunchBusy] = useState(false);
-  const [dependencyReport, setDependencyReport] = useState<{versionId:string;librariesDownloaded:number;assetsDownloaded:number;assetsTotal:number;bytesDownloaded:number;libraryDir:string;assetsDir:string}|null>(null);
+  const [dependencyReport, setDependencyReport] = useState<{versionId:string;librariesDownloaded:number;librariesTotal:number;assetsDownloaded:number;assetsTotal:number;bytesDownloaded:number;libraryDir:string;assetsDir:string}|null>(null);
   const [microsoftConfigured, setMicrosoftConfigured] = useState(false);
   const [loginBusy, setLoginBusy] = useState(false);
   const [deviceCode, setDeviceCode] = useState<{deviceCode:string;userCode:string;verificationUri:string;interval:number;expiresIn:number}|null>(null);
