@@ -181,7 +181,7 @@ function CosmeticWorkshop({ setNotice }: { setNotice: (message: string) => void 
 type ModrinthHit = { project_id: string; slug: string; title: string; description: string; author: string; downloads: number; icon_url?: string; categories: string[]; versions: string[]; project_type: string };
 
 function ModsAndPacks() {
-  const [section, setSection] = useState<"mods" | "packs" | "bedrock">("mods");
+  const [section, setSection] = useState<"mods" | "packs">("mods");
   const [edition, setEdition] = useState<"Java" | "Bedrock">("Java");
   const [query, setQuery] = useState("");
   const [loader, setLoader] = useState("fabric");
@@ -194,7 +194,7 @@ function ModsAndPacks() {
   const [versionLoading, setVersionLoading] = useState(false);
   const [compatibility, setCompatibility] = useState<ReturnType<typeof checkModCompatibility> | null>(null);
   const search = async () => {
-    if (edition === "Bedrock" || section === "bedrock") { setError("Каталог Bedrock-аддонов подключается отдельным источником. Java-моды Modrinth не смешиваются с Bedrock."); return; }
+    if (edition === "Bedrock") { setError("Каталог Bedrock-аддонов подключается отдельным источником. Java-моды Modrinth не смешиваются с Bedrock."); return; }
     setLoading(true); setError(""); setSelected(null);
     try {
       const type = section === "packs" ? "modpack" : "mod";
@@ -209,7 +209,7 @@ function ModsAndPacks() {
   };
   useEffect(() => { void search(); }, [section, edition, gameVersion, loader]);
   useEffect(() => {
-    if (!selected || section === "bedrock") { setVersionInfo([]); setCompatibility(null); return; }
+    if (!selected) { setVersionInfo([]); setCompatibility(null); return; }
     let active = true;
     setVersionLoading(true);
     const params = new URLSearchParams({ game_versions: JSON.stringify([gameVersion]), loaders: JSON.stringify(loader === "any" ? [] : [loader]) });
@@ -231,11 +231,10 @@ function ModsAndPacks() {
     <div className="mods-switcher">
       <button className={section === "mods" ? "active" : ""} onClick={() => { setSection("mods"); setEdition("Java"); }}>Моды</button>
       <button className={section === "packs" ? "active" : ""} onClick={() => { setSection("packs"); setEdition("Java"); }}>Сборки</button>
-      <button className={section === "bedrock" ? "active" : ""} onClick={() => { setSection("bedrock"); setEdition("Bedrock"); }}>Bedrock</button>
     </div>
     {section !== "bedrock" ? <>
       <div className="mods-filters">
-        <label>Издание<select value={edition} onChange={e => setEdition(e.target.value as "Java" | "Bedrock")}><option>Java</option><option>Bedrock</option></select></label>
+        
         <label>Версия Minecraft<select value={gameVersion} onChange={e => setGameVersion(e.target.value)}>{["1.21.11","1.21.10","1.21.9","1.21.8","1.21.7","1.21.6","1.21.5","1.21.4","1.21.3","1.21.1","1.20.6","1.20.4","1.20.1","1.19.4"].map(v => <option key={v}>{v}</option>)}</select></label>
         {section === "mods" && <label>Загрузчик<select value={loader} onChange={e => setLoader(e.target.value)}><option value="fabric">Fabric</option><option value="forge">Forge</option><option value="neoforge">NeoForge</option><option value="quilt">Quilt</option><option value="any">Любой</option></select></label>}
       </div>
@@ -254,7 +253,7 @@ function ModsAndPacks() {
         <p className="mods-footnote">Пока доступен поиск и просмотр каталога. Установка файла в выбранную сборку и автоматическая проверка зависимостей будут подключены следующим техническим шагом — кнопка установки не имитируется.</p>
       </div>}
       <p className="mods-footnote">Источник каталога: Modrinth API. Загрузка и установка отдельных файлов в папку сборки пока не включены.</p>
-    </> : <BedrockManager />
+    </> : <BedrockManager />}
   </section>;
 }
 
@@ -521,12 +520,14 @@ export default function App() {
         {showCreate ? <div className="settings-card create-build-panel">
           <div className="settings-heading"><div className="quick-icon"><Plus /></div><div><b>Новая сборка</b><small>Выбери название, логотип и версию — остальное сделает LoSA</small></div><button className="icon-button" onClick={() => setShowCreate(false)}><X size={18} /></button></div>
           <label className="field-label">Название сборки</label><input className="wide-input" value={newName} maxLength={40} onChange={e => setNewName(e.target.value)} placeholder="Например, Выживание с друзьями" />
-          <label className="field-label">Версия Minecraft</label><select className="wide-input" value={selectedVersion} onChange={e => setSelectedVersion(e.target.value)}>{versions.map(v => <option key={v.id} value={v.id}>{v.id}</option>)}</select>
-          <div className="build-options-grid"><div><label className="field-label">Издание Minecraft</label><select className="wide-input" value={selectedEdition} onChange={e=>setSelectedEdition(e.target.value)}><option value="Java Edition">Java Edition</option><option value="Bedrock Edition" disabled>Bedrock Edition — скоро</option></select></div><div><label className="field-label">Загрузчик</label><select className="wide-input" value={selectedLoader} onChange={e=>setSelectedLoader(e.target.value)}><option value="vanilla">Vanilla</option><option value="fabric" disabled>Fabric — скоро</option><option value="forge" disabled>Forge — скоро</option><option value="neoforge" disabled>NeoForge — скоро</option><option value="quilt" disabled>Quilt — скоро</option></select></div></div>
-          <label className="field-label">Логотип сборки</label><IconPicker selected={newIconIndex} onSelect={index => { setNewIconIndex(index); setNewIcon(null); }} />
-          {(newIcon || newIconIndex !== null) && <img className="edit-preview" src={newIcon ?? avatarData(newIconIndex!)} alt="Предпросмотр логотипа" />}
-          <p className="muted small">Сейчас создание работает для Java Edition и Vanilla. Bedrock и загрузчики Fabric, Forge, NeoForge и Quilt появятся после реализации их установщиков. Во время создания автоматически загружаются клиент, библиотеки, ресурсы и подходящая Java.</p>
-          <button className="primary create-submit" disabled={creating || versionsLoading || versions.length === 0} onClick={() => void createBuild()}>{creating ? <><LoaderCircle size={15} className="spin" /> Подготавливаем сборку…</> : "Создать сборку"}</button>
+          <div className="build-options-grid"><div><label className="field-label">Издание Minecraft</label><select className="wide-input" value={selectedEdition} onChange={e=>setSelectedEdition(e.target.value)}><option value="Java Edition">Java Edition</option><option value="Bedrock Edition">Bedrock Edition</option></select></div>{selectedEdition === "Java Edition" && <div><label className="field-label">Загрузчик</label><select className="wide-input" value={selectedLoader} onChange={e=>setSelectedLoader(e.target.value)}><option value="vanilla">Vanilla</option><option value="fabric" disabled>Fabric — скоро</option><option value="forge" disabled>Forge — скоро</option><option value="neoforge" disabled>NeoForge — скоро</option><option value="quilt" disabled>Quilt — скоро</option></select></div>}</div>
+          {selectedEdition === "Bedrock Edition" ? <BedrockManager /> : <>
+            <label className="field-label">Версия Minecraft</label><select className="wide-input" value={selectedVersion} onChange={e => setSelectedVersion(e.target.value)}>{versions.map(v => <option key={v.id} value={v.id}>{v.id}</option>)}</select>
+            <label className="field-label">Логотип сборки</label><IconPicker selected={newIconIndex} onSelect={index => { setNewIconIndex(index); setNewIcon(null); }} />
+            {(newIcon || newIconIndex !== null) && <img className="edit-preview" src={newIcon ?? avatarData(newIconIndex!)} alt="Предпросмотр логотипа" />}
+            <p className="muted small">Java Edition: клиент, библиотеки, ресурсы и подходящая Java подготавливаются автоматически.</p>
+            <button className="primary create-submit" disabled={creating || versionsLoading || versions.length === 0} onClick={() => void createBuild()}>{creating ? <><LoaderCircle size={15} className="spin" /> Подготавливаем сборку…</> : "Создать сборку"}</button>
+          </>}
         </div> : <button className="outline add-build" onClick={() => setShowCreate(true)}><Plus size={17} /> Создать сборку</button>}
         {loadingInstances && <p className="muted small">Загружаем сохранённые сборки…</p>}
       </section>}
