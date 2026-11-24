@@ -99,3 +99,11 @@ button:focus-visible{outline:2px solid var(--accent,#d8bd64);outline-offset:3px}
 @keyframes startup-logo-in{from{opacity:0;transform:translateY(8px) scale(.96)}to{opacity:1;transform:translateY(0) scale(1)}}
 @keyframes startup-fade-in{from{opacity:0}to{opacity:1}}
 @media(prefers-reduced-motion:reduce){.startup-screen,.startup-logo,.startup-progress span{animation:none!important}.startup-progress span{width:100%;opacity:.7}}
+
+
+/* L.o.S.A. 0.10.1 — startup build preparation feedback */
+.build-preparation{font-size:9px!important;margin-top:4px!important;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%}
+.build-preparation.ready{color:#8fbd94!important}
+.build-preparation.preparing{color:#d8bd64!important}
+.build-preparation.error{color:#e58b83!important}
+.startup-screen p{max-width:min(420px,80vw);text-align:center;min-height:16px}
