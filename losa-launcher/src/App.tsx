@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
-import { Home, Gamepad2, Users, Layers3, Server, Settings, Plus, Play, ChevronDown, Sparkles, ShieldCheck, CircleHelp, Trash2, Pencil, X, LoaderCircle, MessageCircle, Store, Crown, Search, Send, Heart, Globe, Shield, Cpu, HardDrive, ArrowUpRight } from "lucide-react";
+import { Home, Gamepad2, Users, Layers3, Server, Settings, Plus, Play, ChevronDown, Sparkles, ShieldCheck, CircleHelp, Trash2, Pencil, X, LoaderCircle, MessageCircle, Store, Crown, Search, Send, Heart, Globe, Shield, Cpu, HardDrive, ArrowUpRight, Palette, ImagePlus, Copy, Save, Eye } from "lucide-react";
 import { getMinecraftVersions, type MinecraftVersion } from "./lib/minecraft";
 import { invoke } from "@tauri-apps/api/core";
 
-type Page = "Главная" | "Играть" | "Лобби" | "Друзья" | "Чат" | "Магазин" | "Моды и сборки" | "Серверы" | "Настройки";
+type Page = "Главная" | "Играть" | "Лобби" | "Друзья" | "Чат" | "Магазин" | "Мастерская" | "Моды и сборки" | "Серверы" | "Настройки";
 type LauncherInstance = {
   id: string; name: string; versionId: string; loader: string;
   iconDataUrl?: string | null; createdAt: number; lastPlayedAt?: number | null;
@@ -11,7 +11,7 @@ type LauncherInstance = {
 const nav: { name: Page; icon: typeof Home }[] = [
   { name: "Главная", icon: Home }, { name: "Играть", icon: Gamepad2 }, { name: "Лобби", icon: Users },
   { name: "Серверы", icon: Server }, { name: "Чат", icon: MessageCircle }, { name: "Магазин", icon: Store },
- { name: "Друзья", icon: Users }, { name: "Моды и сборки", icon: Layers3 }, { name: "Настройки", icon: Settings }
+ { name: "Друзья", icon: Users }, { name: "Мастерская", icon: Palette }, { name: "Моды и сборки", icon: Layers3 }, { name: "Настройки", icon: Settings }
 ];
 
 const logoGlyphs = [
@@ -48,6 +48,75 @@ const accentPresets = [
 const dateLabel = (timestamp?: number | null) => timestamp
   ? new Date(timestamp * 1000).toLocaleString("ru-RU", { dateStyle: "medium", timeStyle: "short" })
   : "Ещё не запускалась";
+
+
+type CosmeticDraft = {
+  id: string; name: string; description: string; category: string; rarity: string;
+  price: string; glyph: string; image: string; updatedAt: number;
+};
+const cosmeticCategories = ["Головные уборы", "Питомцы", "Эмоции", "Накидки", "Ауры", "Рамки", "Титулы"];
+const emptyCosmetic = (): CosmeticDraft => ({
+  id: crypto.randomUUID(), name: "", description: "", category: "Головные уборы",
+  rarity: "Обычная", price: "Бесплатно", glyph: "✦", image: "", updatedAt: Date.now()
+});
+
+function CosmeticWorkshop({ setNotice }: { setNotice: (message: string) => void }) {
+  const [drafts, setDrafts] = useState<CosmeticDraft[]>(() => {
+    try { return JSON.parse(localStorage.getItem("losa.cosmeticDrafts") ?? "[]") as CosmeticDraft[]; }
+    catch { return []; }
+  });
+  const [item, setItem] = useState<CosmeticDraft>(() => emptyCosmetic());
+  const [saved, setSaved] = useState(false);
+  useEffect(() => { localStorage.setItem("losa.cosmeticDrafts", JSON.stringify(drafts)); }, [drafts]);
+  const update = (patch: Partial<CosmeticDraft>) => { setItem(current => ({ ...current, ...patch, updatedAt: Date.now() })); setSaved(false); };
+  const saveDraft = () => {
+    if (!item.name.trim()) { setNotice("Укажи название предмета перед сохранением."); return; }
+    setDrafts(old => old.some(d => d.id === item.id) ? old.map(d => d.id === item.id ? item : d) : [item, ...old]);
+    setSaved(true); setNotice("Черновик косметики сохранён на этом компьютере.");
+  };
+  const loadDraft = (draft: CosmeticDraft) => { setItem({ ...draft }); setSaved(true); };
+  const removeDraft = (id: string) => { setDrafts(old => old.filter(d => d.id !== id)); if (item.id === id) { setItem(emptyCosmetic()); setSaved(false); } };
+  const duplicateDraft = (draft: CosmeticDraft) => { setItem({ ...draft, id: crypto.randomUUID(), name: draft.name + " — копия", updatedAt: Date.now() }); setSaved(false); };
+  const readImage = (file?: File) => {
+    if (!file) return;
+    if (!file.type.startsWith("image/")) { setNotice("Можно загрузить только файл изображения."); return; }
+    if (file.size > 5 * 1024 * 1024) { setNotice("Изображение слишком большое. Максимальный размер — 5 МБ."); return; }
+    const reader = new FileReader();
+    reader.onload = () => { if (typeof reader.result === "string") update({ image: reader.result }); };
+    reader.onerror = () => setNotice("Не удалось прочитать изображение.");
+    reader.readAsDataURL(file);
+  };
+  return <section className="content workshop-content">
+    <div className="page-title"><div className="eyebrow"><Palette size={13}/> L.o.S.A. CREATOR STUDIO</div><h1>Мастерская косметики</h1><p>Создавай предметы для витрины, настраивай внешний вид и сохраняй собственные черновики.</p></div>
+    <div className="workshop-notice"><ShieldCheck size={16}/><span><b>Локальный режим редактора.</b> Черновики хранятся на этом компьютере. Публикация в общий магазин и проверка прав владельца появятся вместе с серверной системой аккаунтов.</span></div>
+    <div className="workshop-layout">
+      <div className="community-panel workshop-editor">
+        <div className="panel-heading"><div><b>{drafts.some(d => d.id === item.id) ? "Редактирование предмета" : "Новый предмет"}</b><small>Основные свойства и внешний вид</small></div><button className="outline" onClick={() => { setItem(emptyCosmetic()); setSaved(false); }}> <Plus size={14}/> Новый</button></div>
+        <label className="workshop-field">Название предмета<input value={item.name} maxLength={48} onChange={e => update({ name: e.target.value })} placeholder="Например, Корона полярной звезды"/></label>
+        <label className="workshop-field">Описание<textarea value={item.description} maxLength={240} rows={3} onChange={e => update({ description: e.target.value })} placeholder="Коротко расскажи историю и особенности предмета…"/></label>
+        <div className="workshop-fields-two">
+          <label className="workshop-field">Категория<select value={item.category} onChange={e => update({ category: e.target.value })}>{cosmeticCategories.map(c => <option key={c}>{c}</option>)}</select></label>
+          <label className="workshop-field">Редкость<select value={item.rarity} onChange={e => update({ rarity: e.target.value })}>{["Обычная","Необычная","Редкая","Эпическая","Легендарная","Мифическая"].map(r => <option key={r}>{r}</option>)}</select></label>
+        </div>
+        <div className="workshop-fields-two">
+          <label className="workshop-field">Стоимость / тип цены<input value={item.price} maxLength={32} onChange={e => update({ price: e.target.value })} placeholder="Бесплатно / 250 монет"/></label>
+          <label className="workshop-field">Символ предпросмотра<input value={item.glyph} maxLength={4} onChange={e => update({ glyph: e.target.value })} placeholder="✦"/></label>
+        </div>
+        <div className="workshop-field"><span className="workshop-label">Изображение предмета</span><label className="workshop-upload"><ImagePlus size={18}/><span>{item.image ? "Заменить изображение" : "Загрузить изображение"}</span><small>PNG, JPG, WEBP · до 5 МБ</small><input type="file" accept="image/png,image/jpeg,image/webp,image/gif" onChange={e => readImage(e.target.files?.[0])}/></label>{item.image && <button className="text-action" onClick={() => update({ image: "" })}>Удалить изображение</button>}</div>
+        <div className="workshop-actions"><button className="primary" onClick={saveDraft}><Save size={14}/> Сохранить черновик</button><button className="outline" onClick={() => { setItem(emptyCosmetic()); setSaved(false); }}>Сбросить</button></div>
+      </div>
+      <div className="community-panel workshop-preview-panel">
+        <div className="panel-heading"><div><b>Предпросмотр</b><small>Так будет выглядеть карточка предмета</small></div><Eye size={17}/></div>
+        <article className="store-card workshop-preview-card"><div className="store-art workshop-preview-art"><span>{item.image ? <img src={item.image} alt="Предпросмотр косметики"/> : item.glyph || "✦"}</span><i>{item.rarity.toUpperCase()}</i></div><div className="store-item-info"><div><h3>{item.name || "Название предмета"}</h3><small>{item.category} · {item.price || "Без цены"}</small></div><span className="coming">Черновик</span></div><p className="workshop-preview-description">{item.description || "Здесь появится описание предмета."}</p></article>
+        <div className="workshop-preview-meta"><span>Категория</span><b>{item.category}</b><span>Редкость</span><b>{item.rarity}</b></div>
+        {saved && <div className="workshop-saved"><ShieldCheck size={14}/> Черновик сохранён</div>}
+      </div>
+    </div>
+    <div className="section-head workshop-drafts-heading"><div><h2>Мои черновики</h2><p>{drafts.length} сохранено на этом устройстве</p></div></div>
+    {drafts.length === 0 ? <div className="community-panel workshop-empty"><ImagePlus size={24}/><b>Пока нет черновиков</b><span>Создай первый предмет — он появится здесь.</span></div> : <div className="workshop-drafts">{drafts.map(d => <article className="workshop-draft-card" key={d.id}><button className="workshop-draft-open" onClick={() => loadDraft(d)}><span className="workshop-draft-art">{d.image ? <img src={d.image} alt=""/> : d.glyph}</span><span><b>{d.name}</b><small>{d.category} · {d.rarity}</small></span></button><div className="workshop-draft-actions"><button className="icon-button" title="Дублировать" onClick={() => duplicateDraft(d)}><Copy size={14}/></button><button className="icon-button danger-action" title="Удалить" onClick={() => removeDraft(d.id)}><Trash2 size={14}/></button></div></article>)}</div>}
+    <div className="prototype-note"><ShieldCheck size={16}/> Сейчас редактор создаёт визуальные карточки и локальные черновики. Игровые 3D-модели, текстуры Minecraft, анимации питомцев и применение предметов на персонаже — отдельный следующий этап.</div>
+  </section>;
+}
 
 export default function App() {
   const [page, setPage] = useState<Page>("Главная");
@@ -356,6 +425,7 @@ export default function App() {
           <div className="chat-main"><div className="chat-head"><div><b># {chatChannel}</b><small>Демонстрационная комната</small></div><span><Users size={14}/> 24 участника</span></div><div className="chat-feed">{chatMessages.filter(m=>m.channel===chatChannel).map(m=><div className={m.own?"chat-message own":"chat-message"} key={m.id}><span className="chat-avatar">{m.author.slice(0,1)}</span><div><div className="chat-message-meta"><b>{m.author}</b><time>{m.time}</time></div><p>{m.text}</p></div></div>)}{chatMessages.filter(m=>m.channel===chatChannel).length===0&&<div className="chat-empty">Пока тихо. Начни разговор первым.</div>}</div><form className="chat-composer" onSubmit={e=>{e.preventDefault();if(!chatDraft.trim())return;setChatMessages(old=>[...old,{id:Date.now(),channel:chatChannel,author:offlineName||"Гость",text:chatDraft.trim(),time:new Date().toLocaleTimeString("ru-RU",{hour:"2-digit",minute:"2-digit"}),own:true}]);setChatDraft("");}}><input value={chatDraft} onChange={e=>setChatDraft(e.target.value)} placeholder="Написать сообщение…" aria-label="Сообщение"/><button className="primary" type="submit" disabled={!chatDraft.trim()}><Send size={15}/></button></form></div></div>
         <div className="prototype-note"><ShieldCheck size={16}/> Сообщения сейчас сохраняются только в состоянии этого окна и не отправляются другим игрокам.</div>
       </section>}
+      {page === "Мастерская" && <CosmeticWorkshop setNotice={setNotice} />}
       {page === "Магазин" && <section className="content community-content">
         <div className="page-title"><div className="eyebrow"><Store size={13}/> L.o.S.A. STORE</div><h1>Магазин</h1><p>Косметика, которая помогает выразить свой стиль в игре и профиле.</p></div>
         <div className="store-hero"><div><span className="panel-kicker">ТВОЙ СТИЛЬ — ТВОИ ПРАВИЛА</span><h2>Сделай профиль<br/>узнаваемым</h2><p>Накидки, спутники, ауры, эмоции и оформление профиля.</p></div><div className="store-hero-gem">✧</div></div>
