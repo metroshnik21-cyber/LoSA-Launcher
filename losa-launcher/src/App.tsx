@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState, type CSSProperties, type ChangeEvent } from "react";
-import { Home, Gamepad2, Users, Layers3, Server, Settings, Plus, Play, ChevronDown, Sparkles, ShieldCheck, CircleHelp, Trash2, Pencil, Upload, X, LoaderCircle } from "lucide-react";
+import { useEffect, useMemo, useState, type CSSProperties,  } from "react";
+import { Home, Gamepad2, Users, Layers3, Server, Settings, Plus, Play, ChevronDown, Sparkles, ShieldCheck, CircleHelp, Trash2, Pencil, X, LoaderCircle } from "lucide-react";
 import { getMinecraftVersions, type MinecraftVersion } from "./lib/minecraft";
 import { invoke } from "@tauri-apps/api/core";
 
@@ -80,20 +80,6 @@ export default function App() {
     () => [...instances].sort((a, b) => (b.lastPlayedAt ?? b.createdAt) - (a.lastPlayedAt ?? a.createdAt)).slice(0, 5),
     [instances]
   );
-
-  const readImage = (event: ChangeEvent<HTMLInputElement>, setter: (value: string | null) => void) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-    if (!file.type.startsWith("image/") || file.size > 1_500_000) {
-      setError("Выбери изображение размером не более 1,5 МБ.");
-      event.target.value = "";
-      return;
-    }
-    const reader = new FileReader();
-    reader.onload = () => setter(typeof reader.result === "string" ? reader.result : null);
-    reader.onerror = () => setError("Не удалось прочитать файл логотипа.");
-    reader.readAsDataURL(file);
-  };
 
   const saveOfflineProfile = () => {
     const name = offlineNameDraft.trim();
@@ -224,8 +210,8 @@ export default function App() {
           <div className="settings-heading"><div className="quick-icon"><Plus /></div><div><b>Новая сборка</b><small>Выбери название, логотип и версию — остальное сделает LoSA</small></div><button className="icon-button" onClick={() => setShowCreate(false)}><X size={18} /></button></div>
           <label className="field-label">Название сборки</label><input className="wide-input" value={newName} maxLength={40} onChange={e => setNewName(e.target.value)} placeholder="Например, Выживание с друзьями" />
           <label className="field-label">Версия Minecraft</label><select className="wide-input" value={selectedVersion} onChange={e => setSelectedVersion(e.target.value)}>{versions.map(v => <option key={v.id} value={v.id}>{v.id}</option>)}</select>
-          <label className="field-label">Логотип сборки</label><label className="file-picker"><Upload size={15} /> {newIcon ? "Логотип выбран" : "Выбрать изображение"}<input type="file" accept="image/*" onChange={e => readImage(e, setNewIcon)} /></label>
-          {newIcon && <img className="edit-preview" src={newIcon} alt="Предпросмотр логотипа" />}
+          <label className="field-label">Логотип сборки</label><IconPicker selected={newIconIndex} onSelect={index => { setNewIconIndex(index); setNewIcon(null); }} />
+          {(newIcon || newIconIndex !== null) && <img className="edit-preview" src={newIcon ?? avatarData(newIconIndex!)} alt="Предпросмотр логотипа" />}
           <p className="muted small">Сейчас доступны Java Edition и Vanilla. Загрузчики модов будут подключены отдельным этапом. Во время создания автоматически загружаются клиент, библиотеки, ресурсы и подходящая Java.</p>
           <button className="primary create-submit" disabled={creating || versionsLoading || versions.length === 0} onClick={() => void createBuild()}>{creating ? <><LoaderCircle size={15} className="spin" /> Подготавливаем сборку…</> : "Создать сборку"}</button>
         </div> : <button className="outline add-build" onClick={() => setShowCreate(true)}><Plus size={17} /> Создать сборку</button>}
