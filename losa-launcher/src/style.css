@@ -405,3 +405,35 @@ button:focus-visible{outline:2px solid var(--accent,#d8bd64);outline-offset:3px}
 .role-row.trusted .role-symbol{color:#d3a16e;background:#d3a16e1a}
 @media(max-width:850px){.workshop-layout{grid-template-columns:1fr}.workshop-preview-panel{position:static}.workshop-preview-card{max-width:100%}}
 @media(max-width:600px){.workshop-fields-two,.workshop-drafts{grid-template-columns:1fr}.workshop-editor,.workshop-preview-panel{padding:13px}}
+
+/* L.o.S.A. 0.10.8 — Modrinth catalog and Bedrock hub */
+.mods-content{max-width:1120px}
+.mods-switcher{display:flex;gap:7px;margin:0 0 18px;border-bottom:1px solid var(--line,#343a3d);padding-bottom:12px}
+.mods-switcher button{border:1px solid var(--line,#414749);background:transparent;color:var(--muted,#9aa2a5);border-radius:7px;padding:9px 16px;font:600 10px Inter;cursor:pointer}
+.mods-switcher button.active{background:color-mix(in srgb,var(--accent,#d8bd64) 17%,transparent);border-color:var(--accent,#d8bd64);color:var(--text,#eceff0)}
+.mods-filters{display:flex;gap:12px;flex-wrap:wrap;margin:14px 0}
+.mods-filters label{display:grid;gap:6px;color:var(--muted,#899296);font-size:9px;min-width:145px}
+.mods-filters select{background:var(--surface,#202527);color:var(--text,#eceff0);border:1px solid var(--line,#414749);border-radius:7px;padding:9px;font:10px Inter}
+.mods-search{display:flex;align-items:center;gap:10px;background:var(--surface,#1b2022);border:1px solid var(--line,#394144);border-radius:9px;padding:8px 10px;margin:16px 0}
+.mods-search>svg{color:var(--muted,#899296);flex:none}
+.mods-search input{flex:1;min-width:0;background:transparent;border:0;outline:0;color:var(--text,#eceff0);font:11px Inter}
+.mods-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-top:15px}
+.mod-card,.mod-detail,.bedrock-grid article{background:var(--surface,#1b2022);border:1px solid var(--line,#343b3e);border-radius:10px;padding:14px;color:var(--text,#eceff0)}
+.mod-card-head{display:flex;align-items:center;gap:10px}
+.mod-card-head img,.mod-card-head>span{width:42px;height:42px;border-radius:8px;object-fit:cover;display:grid;place-items:center;background:color-mix(in srgb,var(--accent,#d8bd64) 15%,transparent);color:var(--accent,#d8bd64)}
+.mod-card-head>div{min-width:0}.mod-card-head b,.mod-card-head small{display:block}.mod-card-head b{font-size:12px}.mod-card-head small{font-size:9px;color:var(--muted,#899296);margin-top:4px}
+.mod-card p,.mod-detail p{font-size:10px;line-height:1.6;color:var(--muted,#a1aaad);min-height:34px}
+.mod-meta{display:flex;flex-wrap:wrap;gap:12px;color:var(--muted,#899296);font-size:9px;margin:10px 0}
+.mod-card .outline{font-size:9px;padding:8px 11px}
+.mods-empty{display:flex;align-items:center;justify-content:center;gap:10px;min-height:150px;color:var(--muted,#899296);font-size:11px}
+.mods-error{padding:12px;border:1px solid #85534d;border-radius:8px;color:#e9aaa0;font-size:10px}
+.mod-detail{margin-top:16px;position:relative}.mod-detail>.icon-button{position:absolute;right:12px;top:12px}.mod-detail h2{font-size:17px;margin:4px 30px 8px}.mod-detail .outline{display:inline-flex;align-items:center;gap:8px;text-decoration:none}
+.mods-footnote{font-size:9px;line-height:1.6;color:var(--muted,#899296);margin-top:14px}
+.bedrock-banner{display:flex;align-items:center;gap:18px;padding:23px;background:linear-gradient(115deg,#263c34,#1c2828);border:1px solid #3b594b;border-radius:12px}
+.bedrock-mark{width:62px;height:62px;border-radius:14px;background:#6b9c69;color:#f4fff1;display:grid;place-items:center;font-size:35px;font-weight:900}
+.bedrock-banner h2{font-size:21px;margin:7px 0}.bedrock-banner p{font-size:10px;color:#c1d1c6;margin:0;line-height:1.6}
+.bedrock-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:11px;margin:16px 0}
+.bedrock-grid article{display:grid;gap:7px}.bedrock-grid b{font-size:12px}.bedrock-grid span{font-size:10px;color:var(--accent,#d8bd64)}.bedrock-grid small{font-size:9px;color:var(--muted,#899296)}
+.theme-light .mods-filters select,.theme-light .mods-search,.theme-light .mod-card,.theme-light .mod-detail,.theme-light .bedrock-grid article{background:#fff;border-color:#c5cfd4;color:#26353b}
+.theme-light .mods-search input{color:#26353b}
+@media(max-width:760px){.mods-grid,.bedrock-grid{grid-template-columns:1fr}.mods-filters{display:grid;grid-template-columns:1fr 1fr}.mods-search .primary{padding:9px}.bedrock-banner{align-items:flex-start}}
