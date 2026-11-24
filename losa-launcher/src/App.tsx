@@ -43,7 +43,8 @@ export default function App() {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
-  const [editIcon, setEditIcon] = useState<string | null>(null);\n  const [editIconIndex, setEditIconIndex] = useState<number | null>(null);
+  const [editIcon, setEditIcon] = useState<string | null>(null);
+  const [editIconIndex, setEditIconIndex] = useState<number | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [loadingInstances, setLoadingInstances] = useState(true);
@@ -168,7 +169,9 @@ export default function App() {
     } catch (e) { setError(asMessage(e)); }
   };
 
-  const IconPicker = ({ selected, onSelect }: { selected: number | null; onSelect: (index: number) => void }) => <div className="avatar-picker" role="group" aria-label="Варианты логотипа сборки">{avatarPalettes.map((_, index) => <button type="button" key={index} className={selected === index ? "avatar-option selected" : "avatar-option"} onClick={() => onSelect(index)} aria-label={"Логотип " + (index + 1)} title={"Вариант " + (index + 1)}><img src={avatarData(index)} alt="" /></button>)}</div>;\n\n  const BuildCard = ({ instance }: { instance: LauncherInstance }) => {
+  const IconPicker = ({ selected, onSelect }: { selected: number | null; onSelect: (index: number) => void }) => <div className="avatar-picker" role="group" aria-label="Варианты логотипа сборки">{avatarPalettes.map((_, index) => <button type="button" key={index} className={selected === index ? "avatar-option selected" : "avatar-option"} onClick={() => onSelect(index)} aria-label={"Логотип " + (index + 1)} title={"Вариант " + (index + 1)}><img src={avatarData(index)} alt="" /></button>)}</div>;
+
+  const BuildCard = ({ instance }: { instance: LauncherInstance }) => {
     const expanded = expandedId === instance.id;
     return <article className="build-card">
       <div className="build-card-top" onClick={() => setExpandedId(expanded ? null : instance.id)} role="button" tabIndex={0}
