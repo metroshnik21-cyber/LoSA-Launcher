@@ -1,6 +1,6 @@
 # L.o.S.A.
 
-Windows 10/11 desktop launcher prototype, version 0.10.6.
+Windows 10/11 desktop launcher prototype, version 0.10.7.
 
 ## What is included
 - React + TypeScript + Vite desktop UI
@@ -56,3 +56,10 @@ Create an app registration that supports personal Microsoft accounts and public 
 - Added dedicated screens for the L.o.S.A. lobby, server discovery, chat, cosmetics store, and private-server plans.
 - Search, edition filters, favorites, local chat composition, and private-server draft creation are interactive locally.
 - Sample players, server listings, online counts, store items, and VIP/VIP++ plans are clearly prototype data; networking, purchases, and hosted servers are not connected yet.
+
+
+### 0.10.7 — приглашения и роли сообщества
+- Добавлен макет реферального кода и прогресса до пяти подтверждённых приглашений.
+- Добавлена иерархия ролей: Владелец → Заместитель владельца → Администратор → Модератор → Игрок.
+- Роль заместителя владельца предполагает исключительно личное назначение владельцем.
+- Это интерфейсный прототип: генерация кодов, подтверждение приглашений и безопасное назначение ролей требуют серверной системы аккаунтов и пока не активны.

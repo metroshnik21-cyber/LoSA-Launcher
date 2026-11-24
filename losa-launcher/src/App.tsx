@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
-import { Home, Gamepad2, Users, Layers3, Server, Settings, Plus, Play, ChevronDown, Sparkles, ShieldCheck, CircleHelp, Trash2, Pencil, X, LoaderCircle, MessageCircle, Store, Crown, Search, Send, Heart, Globe, Shield, Cpu, HardDrive, ArrowUpRight } from "lucide-react";
+import { Home, Gamepad2, Users, Layers3, Server, Settings, Plus, Play, ChevronDown, Sparkles, ShieldCheck, CircleHelp, Trash2, Pencil, X, LoaderCircle, MessageCircle, Store, Crown, Search, Send, Heart, Globe, Shield, Cpu, HardDrive, ArrowUpRight, Palette, ImagePlus, Copy, Save, Eye } from "lucide-react";
 import { getMinecraftVersions, type MinecraftVersion } from "./lib/minecraft";
 import { invoke } from "@tauri-apps/api/core";
 
-type Page = "Главная" | "Играть" | "Лобби" | "Друзья" | "Чат" | "Магазин" | "Моды и сборки" | "Серверы" | "Настройки";
+type Page = "Главная" | "Играть" | "Лобби" | "Друзья" | "Чат" | "Магазин" | "Мастерская" | "Моды и сборки" | "Серверы" | "Настройки";
 type LauncherInstance = {
   id: string; name: string; versionId: string; loader: string;
   iconDataUrl?: string | null; createdAt: number; lastPlayedAt?: number | null;
@@ -11,7 +11,7 @@ type LauncherInstance = {
 const nav: { name: Page; icon: typeof Home }[] = [
   { name: "Главная", icon: Home }, { name: "Играть", icon: Gamepad2 }, { name: "Лобби", icon: Users },
   { name: "Серверы", icon: Server }, { name: "Чат", icon: MessageCircle }, { name: "Магазин", icon: Store },
- { name: "Друзья", icon: Users }, { name: "Моды и сборки", icon: Layers3 }, { name: "Настройки", icon: Settings }
+ { name: "Друзья", icon: Users }, { name: "Мастерская", icon: Palette }, { name: "Моды и сборки", icon: Layers3 }, { name: "Настройки", icon: Settings }
 ];
 
 const logoGlyphs = [
@@ -48,6 +48,96 @@ const accentPresets = [
 const dateLabel = (timestamp?: number | null) => timestamp
   ? new Date(timestamp * 1000).toLocaleString("ru-RU", { dateStyle: "medium", timeStyle: "short" })
   : "Ещё не запускалась";
+
+
+type CosmeticDraft = {
+  id: string; name: string; description: string; category: string; rarity: string;
+  price: string; glyph: string; image: string; updatedAt: number;
+};
+const cosmeticCategories = ["Головные уборы", "Питомцы", "Эмоции", "Накидки", "Ауры", "Рамки", "Титулы"];
+const emptyCosmetic = (): CosmeticDraft => ({
+  id: crypto.randomUUID(), name: "", description: "", category: "Головные уборы",
+  rarity: "Обычная", price: "Бесплатно", glyph: "✦", image: "", updatedAt: Date.now()
+});
+
+function CosmeticWorkshop({ setNotice }: { setNotice: (message: string) => void }) {
+  const [drafts, setDrafts] = useState<CosmeticDraft[]>([]);
+  const [draftsLoaded, setDraftsLoaded] = useState(false);
+  const [item, setItem] = useState<CosmeticDraft>(() => emptyCosmetic());
+  const [saved, setSaved] = useState(false);
+  useEffect(() => {
+    let active = true;
+    const request = indexedDB.open("losa-cosmetic-workshop", 1);
+    request.onupgradeneeded = () => { if (!request.result.objectStoreNames.contains("drafts")) request.result.createObjectStore("drafts"); };
+    request.onsuccess = () => {
+      const db = request.result;
+      const read = db.transaction("drafts", "readonly").objectStore("drafts").get("all");
+      read.onsuccess = () => { if (active) { setDrafts(Array.isArray(read.result) ? read.result as CosmeticDraft[] : []); setDraftsLoaded(true); } db.close(); };
+      read.onerror = () => { if (active) setDraftsLoaded(true); db.close(); };
+    };
+    request.onerror = () => { if (active) { setDraftsLoaded(true); setNotice("Локальное хранилище черновиков недоступно в этом окружении."); } };
+    return () => { active = false; };
+  }, []);
+  useEffect(() => {
+    if (!draftsLoaded) return;
+    const request = indexedDB.open("losa-cosmetic-workshop", 1);
+    request.onsuccess = () => {
+      const db = request.result;
+      const write = db.transaction("drafts", "readwrite").objectStore("drafts").put(drafts, "all");
+      write.onerror = () => setNotice("Не удалось сохранить черновики. Проверь свободное место приложения.");
+      write.onsuccess = () => db.close();
+    };
+    request.onerror = () => setNotice("Не удалось открыть хранилище черновиков.");
+  }, [drafts, draftsLoaded]);
+  const update = (patch: Partial<CosmeticDraft>) => { setItem(current => ({ ...current, ...patch, updatedAt: Date.now() })); setSaved(false); };
+  const saveDraft = () => {
+    if (!item.name.trim()) { setNotice("Укажи название предмета перед сохранением."); return; }
+    setDrafts(old => old.some(d => d.id === item.id) ? old.map(d => d.id === item.id ? item : d) : [item, ...old]);
+    setSaved(true); setNotice("Черновик косметики сохранён на этом компьютере.");
+  };
+  const loadDraft = (draft: CosmeticDraft) => { setItem({ ...draft }); setSaved(true); };
+  const removeDraft = (id: string) => { setDrafts(old => old.filter(d => d.id !== id)); if (item.id === id) { setItem(emptyCosmetic()); setSaved(false); } };
+  const duplicateDraft = (draft: CosmeticDraft) => { setItem({ ...draft, id: crypto.randomUUID(), name: draft.name + " — копия", updatedAt: Date.now() }); setSaved(false); };
+  const readImage = (file?: File) => {
+    if (!file) return;
+    if (!file.type.startsWith("image/")) { setNotice("Можно загрузить только файл изображения."); return; }
+    if (file.size > 5 * 1024 * 1024) { setNotice("Изображение слишком большое. Максимальный размер — 5 МБ."); return; }
+    const reader = new FileReader();
+    reader.onload = () => { if (typeof reader.result === "string") update({ image: reader.result }); };
+    reader.onerror = () => setNotice("Не удалось прочитать изображение.");
+    reader.readAsDataURL(file);
+  };
+  return <section className="content workshop-content">
+    <div className="page-title"><div className="eyebrow"><Palette size={13}/> L.o.S.A. CREATOR STUDIO</div><h1>Мастерская косметики</h1><p>Создавай предметы для витрины, настраивай внешний вид и сохраняй собственные черновики.</p></div>
+    <div className="workshop-notice"><ShieldCheck size={16}/><span><b>Локальный режим редактора.</b> Черновики хранятся локально в базе данных приложения. Публикация в общий магазин и проверка прав владельца появятся вместе с серверной системой аккаунтов.</span></div>
+    <div className="workshop-layout">
+      <div className="community-panel workshop-editor">
+        <div className="panel-heading"><div><b>{drafts.some(d => d.id === item.id) ? "Редактирование предмета" : "Новый предмет"}</b><small>Основные свойства и внешний вид</small></div><button className="outline" onClick={() => { setItem(emptyCosmetic()); setSaved(false); }}> <Plus size={14}/> Новый</button></div>
+        <label className="workshop-field">Название предмета<input value={item.name} maxLength={48} onChange={e => update({ name: e.target.value })} placeholder="Например, Корона полярной звезды"/></label>
+        <label className="workshop-field">Описание<textarea value={item.description} maxLength={240} rows={3} onChange={e => update({ description: e.target.value })} placeholder="Коротко расскажи историю и особенности предмета…"/></label>
+        <div className="workshop-fields-two">
+          <label className="workshop-field">Категория<select value={item.category} onChange={e => update({ category: e.target.value })}>{cosmeticCategories.map(c => <option key={c}>{c}</option>)}</select></label>
+          <label className="workshop-field">Редкость<select value={item.rarity} onChange={e => update({ rarity: e.target.value })}>{["Обычная","Необычная","Редкая","Эпическая","Легендарная","Мифическая"].map(r => <option key={r}>{r}</option>)}</select></label>
+        </div>
+        <div className="workshop-fields-two">
+          <label className="workshop-field">Стоимость / тип цены<input value={item.price} maxLength={32} onChange={e => update({ price: e.target.value })} placeholder="Бесплатно / 250 монет"/></label>
+          <label className="workshop-field">Символ предпросмотра<input value={item.glyph} maxLength={4} onChange={e => update({ glyph: e.target.value })} placeholder="✦"/></label>
+        </div>
+        <div className="workshop-field"><span className="workshop-label">Изображение предмета</span><label className="workshop-upload"><ImagePlus size={18}/><span>{item.image ? "Заменить изображение" : "Загрузить изображение"}</span><small>PNG, JPG, WEBP · до 5 МБ</small><input type="file" accept="image/png,image/jpeg,image/webp,image/gif" onChange={e => readImage(e.target.files?.[0])}/></label>{item.image && <button className="text-action" onClick={() => update({ image: "" })}>Удалить изображение</button>}</div>
+        <div className="workshop-actions"><button className="primary" onClick={saveDraft}><Save size={14}/> Сохранить черновик</button><button className="outline" onClick={() => { setItem(emptyCosmetic()); setSaved(false); }}>Сбросить</button></div>
+      </div>
+      <div className="community-panel workshop-preview-panel">
+        <div className="panel-heading"><div><b>Предпросмотр</b><small>Так будет выглядеть карточка предмета</small></div><Eye size={17}/></div>
+        <article className="store-card workshop-preview-card"><div className="store-art workshop-preview-art"><span>{item.image ? <img src={item.image} alt="Предпросмотр косметики"/> : item.glyph || "✦"}</span><i>{item.rarity.toUpperCase()}</i></div><div className="store-item-info"><div><h3>{item.name || "Название предмета"}</h3><small>{item.category} · {item.price || "Без цены"}</small></div><span className="coming">Черновик</span></div><p className="workshop-preview-description">{item.description || "Здесь появится описание предмета."}</p></article>
+        <div className="workshop-preview-meta"><span>Категория</span><b>{item.category}</b><span>Редкость</span><b>{item.rarity}</b></div>
+        {saved && <div className="workshop-saved"><ShieldCheck size={14}/> Черновик сохранён</div>}
+      </div>
+    </div>
+    <div className="section-head workshop-drafts-heading"><div><h2>Мои черновики</h2><p>{drafts.length} сохранено на этом устройстве</p></div></div>
+    {drafts.length === 0 ? <div className="community-panel workshop-empty"><ImagePlus size={24}/><b>Пока нет черновиков</b><span>Создай первый предмет — он появится здесь.</span></div> : <div className="workshop-drafts">{drafts.map(d => <article className="workshop-draft-card" key={d.id}><button className="workshop-draft-open" onClick={() => loadDraft(d)}><span className="workshop-draft-art">{d.image ? <img src={d.image} alt=""/> : d.glyph}</span><span><b>{d.name}</b><small>{d.category} · {d.rarity}</small></span></button><div className="workshop-draft-actions"><button className="icon-button" title="Дублировать" onClick={() => duplicateDraft(d)}><Copy size={14}/></button><button className="icon-button danger-action" title="Удалить" onClick={() => removeDraft(d.id)}><Trash2 size={14}/></button></div></article>)}</div>}
+    <div className="prototype-note"><ShieldCheck size={16}/> Сейчас редактор создаёт визуальные карточки и локальные черновики. Игровые 3D-модели, текстуры Minecraft, анимации питомцев и применение предметов на персонаже — отдельный следующий этап.</div>
+  </section>;
+}
 
 export default function App() {
   const [page, setPage] = useState<Page>("Главная");
@@ -296,10 +386,10 @@ export default function App() {
       </div>
       <div className="nav-label">БИБЛИОТЕКА</div>
       <nav>{nav.map(({ name, icon: Icon }) => <button key={name} className={page === name ? "nav-item selected" : "nav-item"} onClick={() => setPage(name)}><Icon size={18} /><span>{name}</span></button>)}</nav>
-      <div className="sidebar-bottom"><div className="status-dot" /> Offline-режим <span className="version">v0.10.6</span></div>
+      <div className="sidebar-bottom"><div className="status-dot" /> Offline-режим <span className="version">v0.10.7</span></div>
     </aside>
     <main className="main">
-      <header className="topbar"><div className="crumb">L.o.S.A. <span>/</span> {page}</div><button className="icon-button" title="Справка" onClick={() => setNotice("L.o.S.A. 0.10.6 — улучшения серверов, магазина и настроек.")}><CircleHelp size={18} /></button></header>
+      <header className="topbar"><div className="crumb">L.o.S.A. <span>/</span> {page}</div><button className="icon-button" title="Справка" onClick={() => setNotice("L.o.S.A. 0.10.7 — приглашения, роли и мастерская косметики.")}><CircleHelp size={18} /></button></header>
       {page === "Главная" && <section className="content">
         {instances.length === 0 ? <div className="hero"><div className="hero-copy"><div className="eyebrow"><Sparkles size={14} /> ВАШ MINECRAFT. ВАШИ ПРАВИЛА.</div><h1>Добро пожаловать<br /><em>в L.o.S.A.</em></h1><p>Создай первую сборку — LoSA сама подготовит игровые файлы и Java.</p><button className="primary" onClick={() => { setPage("Играть"); setShowCreate(true); }}><Plus size={16} /> Создать первую сборку</button></div><img className="hero-mark" src="/losa-logo.png" /></div>
         : <><div className="page-title"><div className="eyebrow">ТВОЙ ИГРОВОЙ ЦЕНТР</div><h1>С возвращением</h1><p>Недавно запускавшиеся сборки и быстрый переход к игре.</p></div><div className="section-head"><div><h2>Недавняя активность</h2><p>Сборки отсортированы по последнему запуску</p></div><button className="outline" onClick={() => { setPage("Играть"); setShowCreate(true); }}><Plus size={15} /> Новая сборка</button></div><div className="build-list">{recentInstances.map(instance => <BuildCard key={instance.id} instance={instance} />)}</div></>}
@@ -356,24 +446,53 @@ export default function App() {
           <div className="chat-main"><div className="chat-head"><div><b># {chatChannel}</b><small>Демонстрационная комната</small></div><span><Users size={14}/> 24 участника</span></div><div className="chat-feed">{chatMessages.filter(m=>m.channel===chatChannel).map(m=><div className={m.own?"chat-message own":"chat-message"} key={m.id}><span className="chat-avatar">{m.author.slice(0,1)}</span><div><div className="chat-message-meta"><b>{m.author}</b><time>{m.time}</time></div><p>{m.text}</p></div></div>)}{chatMessages.filter(m=>m.channel===chatChannel).length===0&&<div className="chat-empty">Пока тихо. Начни разговор первым.</div>}</div><form className="chat-composer" onSubmit={e=>{e.preventDefault();if(!chatDraft.trim())return;setChatMessages(old=>[...old,{id:Date.now(),channel:chatChannel,author:offlineName||"Гость",text:chatDraft.trim(),time:new Date().toLocaleTimeString("ru-RU",{hour:"2-digit",minute:"2-digit"}),own:true}]);setChatDraft("");}}><input value={chatDraft} onChange={e=>setChatDraft(e.target.value)} placeholder="Написать сообщение…" aria-label="Сообщение"/><button className="primary" type="submit" disabled={!chatDraft.trim()}><Send size={15}/></button></form></div></div>
         <div className="prototype-note"><ShieldCheck size={16}/> Сообщения сейчас сохраняются только в состоянии этого окна и не отправляются другим игрокам.</div>
       </section>}
+      {page === "Мастерская" && <CosmeticWorkshop setNotice={setNotice} />}
       {page === "Магазин" && <section className="content community-content">
         <div className="page-title"><div className="eyebrow"><Store size={13}/> L.o.S.A. STORE</div><h1>Магазин</h1><p>Косметика, которая помогает выразить свой стиль в игре и профиле.</p></div>
         <div className="store-hero"><div><span className="panel-kicker">ТВОЙ СТИЛЬ — ТВОИ ПРАВИЛА</span><h2>Сделай профиль<br/>узнаваемым</h2><p>Накидки, спутники, ауры, эмоции и оформление профиля.</p></div><div className="store-hero-gem">✧</div></div>
-        <div className="store-toolbar">{["Все","Накидки","Спутники","Ауры","Эмоции","Рамки","Титулы"].map(c=><button key={c} className={storeCategory===c?"active":""} onClick={()=>setStoreCategory(c)}>{c}</button>)}</div>
+        <div className="store-toolbar">{["Все","Накидки","Головные уборы","Питомцы","Ауры","Эмоции","Рамки","Титулы"].map(c=><button key={c} className={storeCategory===c?"active":""} onClick={()=>setStoreCategory(c)}>{c}</button>)}</div>
         <div className="store-grid">{[
           {name:"Северное сияние",kind:"Накидки",price:"Косметика",glyph:"✦",tone:"aurora"},
-          {name:"Лис-компаньон",kind:"Спутники",price:"Косметика",glyph:"◆",tone:"fox"},
           {name:"Звёздная аура",kind:"Ауры",price:"Косметика",glyph:"✧",tone:"star"},
-          {name:"Победный жест",kind:"Эмоции",price:"Анимация",glyph:"★",tone:"emote"},
           {name:"Рамка созвездия",kind:"Рамки",price:"Профиль",glyph:"◇",tone:"frame"},
           {name:"Лунный след",kind:"Ауры",price:"Эффект",glyph:"☾",tone:"moon"},
           {name:"Первопроходец",kind:"Титулы",price:"Титул профиля",glyph:"✦",tone:"star"},
-          {name:"Повелитель глубин",kind:"Титулы",price:"Титул профиля",glyph:"♜",tone:"moon"}
-        ].filter(x=>storeCategory==="Все"||x.kind===storeCategory).map(x=><article className="store-card" key={x.name}><div className={"store-art "+x.tone}><span>{x.glyph}</span><i>ПРЕДМЕТ</i></div><div className="store-item-info"><div><h3>{x.name}</h3><small>{x.kind} · {x.price}</small></div><button className="outline" onClick={()=>setNotice("Витрина пока демонстрационная. Реальные покупки и инвентарь появятся после подключения магазина.")}>Скоро</button></div></article>)}</div>
+          {name:"Повелитель глубин",kind:"Титулы",price:"Титул профиля",glyph:"♜",tone:"moon"},
+
+          {name:"Корона полярной звезды",kind:"Головные уборы",price:"Косметика",glyph:"♛",tone:"hat-polar"},
+          {name:"Капюшон сумеречного леса",kind:"Головные уборы",price:"Косметика",glyph:"♧",tone:"hat-forest"},
+          {name:"Шахтёрская каска «Искра»",kind:"Головные уборы",price:"Косметика",glyph:"⛏",tone:"hat-miner"},
+          {name:"Шляпа звёздного картографа",kind:"Головные уборы",price:"Косметика",glyph:"✧",tone:"hat-mage"},
+          {name:"Венец драконьих рогов",kind:"Головные уборы",price:"Косметика",glyph:"♜",tone:"hat-dragon"},
+          {name:"Неоновая гарнитура",kind:"Головные уборы",price:"Косметика",glyph:"♫",tone:"hat-neon"},
+          {name:"Венок летнего рассвета",kind:"Головные уборы",price:"Косметика",glyph:"❀",tone:"hat-bloom"},
+          {name:"Маска песчаного стража",kind:"Головные уборы",price:"Косметика",glyph:"◈",tone:"hat-dune"},
+          {name:"Шлем глубинного исследователя",kind:"Головные уборы",price:"Косметика",glyph:"◉",tone:"hat-deep"},
+
+          {name:"Лис-компаньон «Рыжик»",kind:"Питомцы",price:"Питомец",glyph:"🦊",tone:"pet-fox"},
+          {name:"Дракончик угольного пламени",kind:"Питомцы",price:"Питомец",glyph:"🐉",tone:"pet-drake"},
+          {name:"Полярная сова",kind:"Питомцы",price:"Питомец",glyph:"🦉",tone:"pet-owl"},
+          {name:"Аксолотль-исследователь",kind:"Питомцы",price:"Питомец",glyph:"🦎",tone:"pet-axo"},
+          {name:"Малый каменный голем",kind:"Питомцы",price:"Питомец",glyph:"🪨",tone:"pet-golem"},
+          {name:"Светлячок-комета",kind:"Питомцы",price:"Питомец",glyph:"✹",tone:"pet-firefly"},
+          {name:"Черепашонок с рюкзаком",kind:"Питомцы",price:"Питомец",glyph:"🐢",tone:"pet-turtle"},
+          {name:"Ворон-хранитель",kind:"Питомцы",price:"Питомец",glyph:"🐦‍⬛",tone:"pet-raven"},
+          {name:"Слизень-мимик",kind:"Питомцы",price:"Питомец",glyph:"◉",tone:"pet-slime"},
+
+          {name:"Танец победителя",kind:"Эмоции",price:"Анимация",glyph:"★",tone:"emote-dance"},
+          {name:"Салют команде",kind:"Эмоции",price:"Анимация",glyph:"⚑",tone:"emote-salute"},
+          {name:"Заразительный смех",kind:"Эмоции",price:"Анимация",glyph:"☺",tone:"emote-laugh"},
+          {name:"Ну и ну!",kind:"Эмоции",price:"Анимация",glyph:"!? ",tone:"emote-wow"},
+          {name:"Воздушное сердце",kind:"Эмоции",price:"Анимация",glyph:"♥",tone:"emote-heart"},
+          {name:"Приветствие путешественника",kind:"Эмоции",price:"Анимация",glyph:"✋",tone:"emote-wave"},
+          {name:"Неловкое пожатие плечами",kind:"Эмоции",price:"Анимация",glyph:"〰",tone:"emote-shrug"},
+          {name:"Сон на ходу",kind:"Эмоции",price:"Анимация",glyph:"☾",tone:"emote-sleep"},
+          {name:"Фирменный жест L.o.S.A.",kind:"Эмоции",price:"Анимация",glyph:"✦",tone:"emote-losa"}
+        ].filter(x=>storeCategory==="Все"||x.kind===storeCategory).map(x=><article className="store-card" key={x.name}><div className={"store-art "+x.tone}><span>{x.glyph}</span><i>КОНЦЕПТ</i></div><div className="store-item-info"><div><h3>{x.name}</h3><small>{x.kind} · {x.price}</small></div><button className="outline" onClick={()=>setNotice("Витрина пока демонстрационная. Реальные покупки и инвентарь появятся после подключения магазина.")}>Скоро</button></div></article>)}</div>
         <div className="subscription-section"><div className="section-head"><div><h2>Подписки L.o.S.A.</h2><p>Косметика, титулы и оформление профиля</p></div></div><div className="plan-grid"><article className="plan-card"><span className="plan-label vip"><Crown size={12}/> VIP</span><h3>VIP</h3><p>Больше способов выразить свой стиль</p><div className="plan-spec"><span>Эксклюзивные косметические предметы</span><span>Набор титулов профиля</span><span>Особенная рамка профиля</span></div><b className="plan-price">€2,99 / мес.</b><button className="outline" onClick={()=>setNotice("Подписки пока концептуальные. Оплата и выдача предметов не подключены.")}>Скоро</button></article><article className="plan-card featured"><span className="plan-label vipplus"><Crown size={12}/> VIP+</span><h3>VIP+</h3><p>Расширенная косметическая коллекция</p><div className="plan-spec"><span>Все косметические наборы VIP</span><span>Дополнительные редкие титулы</span><span>Расширенная рамка и эффекты профиля</span></div><b className="plan-price">€5,99 / мес.</b><button className="primary" onClick={()=>setNotice("Подписки пока концептуальные. Оплата и выдача предметов не подключены.")}>Скоро</button></article></div></div>
         <div className="prototype-note"><ShieldCheck size={16}/> Витрина и категории готовы как интерфейс. Баланс, инвентарь и покупки пока отключены.</div>
       </section>}
-      {page === "Друзья" && <section className="content community-content"><div className="page-title"><div className="eyebrow"><Users size={13}/> COMMUNITY</div><h1>Друзья</h1><p>Твой круг игроков в L.o.S.A. — независимо от издания Minecraft.</p></div><div className="community-panel"><div className="panel-heading"><div><b>Найти игроков</b><small>Поиск по нику — пока демонстрационный</small></div></div><div className="search-field friend-search"><Search size={16}/><input value={friendQuery} onChange={e=>setFriendQuery(e.target.value)} placeholder="Введи игровой ник…"/></div><div className="friend-results">{[{name:"Alex",title:"Исследователь",status:"В сети"},{name:"Mira",title:"Хранитель миров",status:"Недавно была"},{name:"Jamie",title:"Мастер редстоуна",status:"В сети"}].filter(f=>f.name.toLowerCase().includes(friendQuery.toLowerCase())||f.title.toLowerCase().includes(friendQuery.toLowerCase())).map(f=><div className="friend-result" key={f.name}><span className="direct-avatar">{f.name[0]}</span><div><b>{f.name}</b><small>{f.title}</small></div><span className="friend-presence">{f.status}</span><button className="outline" onClick={()=>setNotice("Заявки в друзья заработают после подключения аккаунтов L.o.S.A.")}>Добавить</button></div>)}</div></div><div className="prototype-note"><ShieldCheck size={16}/> Пока используется локальный Offline-профиль. Общие друзья появятся после запуска аккаунтов.</div></section>}
+      {page === "Друзья" && <section className="content community-content"><div className="page-title"><div className="eyebrow"><Users size={13}/> COMMUNITY</div><h1>Друзья</h1><p>Твой круг игроков в L.o.S.A. — независимо от издания Minecraft.</p></div><div className="community-panel"><div className="panel-heading"><div><b>Найти игроков</b><small>Поиск по нику — пока демонстрационный</small></div></div><div className="search-field friend-search"><Search size={16}/><input value={friendQuery} onChange={e=>setFriendQuery(e.target.value)} placeholder="Введи игровой ник…"/></div><div className="friend-results">{[{name:"Alex",title:"Исследователь",status:"В сети"},{name:"Mira",title:"Хранитель миров",status:"Недавно была"},{name:"Jamie",title:"Мастер редстоуна",status:"В сети"}].filter(f=>f.name.toLowerCase().includes(friendQuery.toLowerCase())||f.title.toLowerCase().includes(friendQuery.toLowerCase())).map(f=><div className="friend-result" key={f.name}><span className="direct-avatar">{f.name[0]}</span><div><b>{f.name}</b><small>{f.title}</small></div><span className="friend-presence">{f.status}</span><button className="outline" onClick={()=>setNotice("Заявки в друзья заработают после подключения аккаунтов L.o.S.A.")}>Добавить</button></div>)}</div></div><div className="referral-panel community-panel"><div className="referral-top"><div><span className="panel-kicker">ПРИГЛАШАЙ ДРУЗЕЙ</span><h2>Твой код приглашения</h2><p>Делись кодом L.o.S.A. и собирай свою команду</p></div><div className="referral-icon"><Users size={30}/></div></div><div className="referral-code"><div><small>ЛИЧНЫЙ КОД</small><b>Появится после запуска аккаунтов</b></div><span className="coming">Скоро</span></div><div className="referral-progress"><div className="referral-progress-head"><b>Путь к модератору</b><strong>0 из 5 друзей</strong></div><div className="referral-track"><span style={{width:"0%"}}/></div><p>Когда пять приглашённых пользователей зарегистрируются по твоему коду и подтвердят аккаунты, система автоматически назначит тебе роль модератора.</p></div><div className="role-ladder"><div className="role-row owner"><span className="role-symbol"><Crown size={16}/></span><div><b>Владелец</b><small>Ты — создатель L.o.S.A. Полный контроль над проектом.</small></div><span className="role-tag">Ты</span></div><div className="role-row deputy"><span className="role-symbol"><ShieldCheck size={16}/></span><div><b>Заместитель владельца</b><small>Выше администратора. Назначается и снимается только лично владельцем.</small></div><span className="role-tag">Личное назначение</span></div><div className="role-row trusted"><span className="role-symbol"><ShieldCheck size={16}/></span><div><b>Доверенный админ</b><small>Назначается лично владельцем или заместителем владельца за особое доверие. Получает расширенные полномочия в рамках поручений.</small></div><span className="role-tag">Личное назначение</span></div><div className="role-row admin"><span className="role-symbol"><Shield size={16}/></span><div><b>Администратор</b><small>Управление сообществом и модерацией в пределах выданных прав.</small></div></div><div className="role-row moderator"><span className="role-symbol"><Users size={16}/></span><div><b>Модератор</b><small>Автоматически за пять подтверждённых приглашений. Помогает поддерживать порядок.</small></div><span className="role-tag">5 приглашений</span></div><div className="role-row member"><span className="role-symbol"><Users size={16}/></span><div><b>Игрок</b><small>Стандартная роль участника сообщества.</small></div></div></div><p className="referral-safety"><ShieldCheck size={14}/> Приглашения должны подтверждаться сервером: один аккаунт — один учёт, собственные и повторные регистрации не засчитываются. Роль нельзя выдать изменением локальных файлов.</p></div>\n<div className="prototype-note"><ShieldCheck size={16}/> Пока используется локальный Offline-профиль. Общие друзья появятся после запуска аккаунтов.</div></section>}
       {page === "Моды и сборки" && <section className="content empty-page"><div className="empty-icon"><Layers3/></div><div className="eyebrow">L.o.S.A. · MODS</div><h1>Моды и сборки</h1><p>Каталог модов и управление зависимостями будут добавлены отдельным этапом.</p><span className="coming">Каталог готовится</span></section>}
 
       {(error || notice) && <div className={error ? "toast error-toast" : "toast"} onClick={() => { setError(""); setNotice(""); }}>{error || notice}<button aria-label="Закрыть">×</button></div>}
