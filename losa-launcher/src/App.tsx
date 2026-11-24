@@ -12,7 +12,19 @@ const nav: { name: Page; icon: typeof Home }[] = [
   { name: "Главная", icon: Home }, { name: "Играть", icon: Gamepad2 }, { name: "Друзья", icon: Users },
   { name: "Моды и сборки", icon: Layers3 }, { name: "Серверы", icon: Server }, { name: "Настройки", icon: Settings }
 ];
-const asMessage = (error: unknown) => error instanceof Error ? error.message : String(error);
+
+const avatarPalettes = Array.from({ length: 49 }, (_, i) => ({
+  skin: ["#e7b58a", "#c98b63", "#f0c9a0", "#9b654b", "#d9a078", "#f2d2b5", "#b97852"][i % 7],
+  hair: ["#4b3027", "#302a25", "#8b512d", "#d8a34c", "#5b6570", "#25252b", "#a34e37"][Math.floor(i / 7)],
+  shirt: ["#347c55", "#477da8", "#a64b49", "#8d65a6", "#d4a33d", "#4c555b", "#d5d8d2"][i % 7],
+  bg: ["#b8a18c", "#d5bd83", "#8c9a9e", "#b77b75", "#6e8c63", "#c6c6b4", "#a9a1bd"][Math.floor(i / 7)]
+}));
+const avatarData = (index: number) => {
+  const p = avatarPalettes[index % avatarPalettes.length];
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" shape-rendering="crispEdges"><rect width="48" height="48" fill="${p.bg}"/><rect x="7" y="5" width="34" height="13" fill="${p.hair}"/><rect x="5" y="12" width="7" height="23" fill="${p.hair}"/><rect x="36" y="12" width="7" height="23" fill="${p.hair}"/><rect x="11" y="12" width="26" height="23" fill="${p.skin}"/><rect x="15" y="20" width="5" height="5" fill="#28282a"/><rect x="29" y="20" width="5" height="5" fill="#28282a"/><rect x="20" y="29" width="9" height="3" fill="#874d45"/><rect x="8" y="36" width="32" height="12" fill="${p.shirt}"/><rect x="5" y="43" width="38" height="5" fill="#25282b"/></svg>`;
+  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+};
+\nconst asMessage = (error: unknown) => error instanceof Error ? error.message : String(error);
 const dateLabel = (timestamp?: number | null) => timestamp
   ? new Date(timestamp * 1000).toLocaleString("ru-RU", { dateStyle: "medium", timeStyle: "short" })
   : "Ещё не запускалась";
@@ -26,12 +38,12 @@ export default function App() {
   const [versions, setVersions] = useState<MinecraftVersion[]>([]);
   const [selectedVersion, setSelectedVersion] = useState("1.21.4");
   const [newName, setNewName] = useState("");
-  const [newIcon, setNewIcon] = useState<string | null>(null);
+  const [newIcon, setNewIcon] = useState<string | null>(null);\n  const [newIconIndex, setNewIconIndex] = useState<number | null>(null);
   const [showCreate, setShowCreate] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
-  const [editIcon, setEditIcon] = useState<string | null>(null);
+  const [editIcon, setEditIcon] = useState<string | null>(null);\n  const [editIconIndex, setEditIconIndex] = useState<number | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [loadingInstances, setLoadingInstances] = useState(true);
@@ -101,7 +113,7 @@ export default function App() {
       setInstances(current => [instance, ...current]);
       setExpandedId(instance.id);
       setShowCreate(false);
-      setNewName(""); setNewIcon(null);
+      setNewName(""); setNewIcon(null); setNewIconIndex(null);
       setNotice("Сборка создана. LoSA автоматически подготавливает Minecraft, библиотеки, ресурсы и Java.");
       await invoke("prepare_instance", { instanceId: instance.id });
       setNotice("Сборка полностью подготовлена. Можно играть.");
@@ -132,7 +144,7 @@ export default function App() {
   };
 
   const beginEdit = (instance: LauncherInstance) => {
-    setEditingId(instance.id); setEditName(instance.name); setEditIcon(null);
+    setEditingId(instance.id); setEditName(instance.name); setEditIcon(null); setEditIconIndex(null);
   };
 
   const saveEdit = async (instance: LauncherInstance) => {
@@ -156,7 +168,7 @@ export default function App() {
     } catch (e) { setError(asMessage(e)); }
   };
 
-  const BuildCard = ({ instance }: { instance: LauncherInstance }) => {
+  const IconPicker = ({ selected, onSelect }: { selected: number | null; onSelect: (index: number) => void }) => <div className="avatar-picker" role="group" aria-label="Варианты логотипа сборки">{avatarPalettes.map((_, index) => <button type="button" key={index} className={selected === index ? "avatar-option selected" : "avatar-option"} onClick={() => onSelect(index)} aria-label={"Логотип " + (index + 1)} title={"Вариант " + (index + 1)}><img src={avatarData(index)} alt="" /></button>)}</div>;\n\n  const BuildCard = ({ instance }: { instance: LauncherInstance }) => {
     const expanded = expandedId === instance.id;
     return <article className="build-card">
       <div className="build-card-top" onClick={() => setExpandedId(expanded ? null : instance.id)} role="button" tabIndex={0}
@@ -169,7 +181,7 @@ export default function App() {
         </button>
         <ChevronDown size={17} className={expanded ? "build-chevron open" : "build-chevron"} />
       </div>
-      {expanded && <div className="build-details">
+      <div className={expanded ? "build-details expanded" : "build-details"} aria-hidden={!expanded} inert={!expanded}>
         {editingId === instance.id ? <div className="edit-build">
           <label>Название сборки<input value={editName} maxLength={40} onChange={e => setEditName(e.target.value)} /></label>
           <label className="file-picker"><Upload size={15} /> Заменить логотип<input type="file" accept="image/*" onChange={e => readImage(e, setEditIcon)} /></label>
