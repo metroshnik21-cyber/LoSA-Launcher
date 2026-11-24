@@ -1,16 +1,17 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
-import { Home, Gamepad2, Users, Layers3, Server, Settings, Plus, Play, ChevronDown, Sparkles, ShieldCheck, CircleHelp, Trash2, Pencil, X, LoaderCircle } from "lucide-react";
+import { Home, Gamepad2, Users, Layers3, Server, Settings, Plus, Play, ChevronDown, Sparkles, ShieldCheck, CircleHelp, Trash2, Pencil, X, LoaderCircle, MessageCircle, Store, Crown, Search, Send, Heart, Globe, Shield, Cpu, HardDrive, ArrowUpRight } from "lucide-react";
 import { getMinecraftVersions, type MinecraftVersion } from "./lib/minecraft";
 import { invoke } from "@tauri-apps/api/core";
 
-type Page = "Главная" | "Играть" | "Друзья" | "Моды и сборки" | "Серверы" | "Настройки";
+type Page = "Главная" | "Играть" | "Лобби" | "Друзья" | "Список серверов" | "Чат" | "Магазин" | "Приватные серверы" | "Моды и сборки" | "Серверы" | "Настройки";
 type LauncherInstance = {
   id: string; name: string; versionId: string; loader: string;
   iconDataUrl?: string | null; createdAt: number; lastPlayedAt?: number | null;
 };
 const nav: { name: Page; icon: typeof Home }[] = [
-  { name: "Главная", icon: Home }, { name: "Играть", icon: Gamepad2 }, { name: "Друзья", icon: Users },
-  { name: "Моды и сборки", icon: Layers3 }, { name: "Серверы", icon: Server }, { name: "Настройки", icon: Settings }
+  { name: "Главная", icon: Home }, { name: "Играть", icon: Gamepad2 }, { name: "Лобби", icon: Users },
+  { name: "Список серверов", icon: Server }, { name: "Чат", icon: MessageCircle }, { name: "Магазин", icon: Store },
+  { name: "Приватные серверы", icon: Crown }, { name: "Друзья", icon: Users }, { name: "Моды и сборки", icon: Layers3 }, { name: "Настройки", icon: Settings }
 ];
 
 const logoGlyphs = [
@@ -77,6 +78,20 @@ export default function App() {
   const [versionsLoading, setVersionsLoading] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const [serverQuery, setServerQuery] = useState("");
+  const [serverEdition, setServerEdition] = useState<"Все" | "Java" | "Bedrock">("Все");
+  const [favoriteServers, setFavoriteServers] = useState<string[]>(["block-haven"]);
+  const [chatChannel, setChatChannel] = useState("Общий");
+  const [chatDraft, setChatDraft] = useState("");
+  const [chatMessages, setChatMessages] = useState([
+    { id: 1, channel: "Общий", author: "Alex", text: "Всем привет! Кто сегодня играет?", time: "12:42", own: false },
+    { id: 2, channel: "Общий", author: "Mira", text: "Я буду вечером, можем зайти на выживание", time: "12:44", own: false },
+    { id: 3, channel: "Общий", author: "Steve", text: "Отлично, соберёмся в лобби 🙂", time: "12:47", own: false }
+  ]);
+  const [privateServerName, setPrivateServerName] = useState("");
+  const [privateServerDrafts, setPrivateServerDrafts] = useState<string[]>([]);
+  const [storeCategory, setStoreCategory] = useState("Все");
+
 
   useEffect(() => { localStorage.setItem("losa.accentColor", accentColor); }, [accentColor]);
   useEffect(() => { localStorage.setItem("losa.theme", theme); }, [theme]);
@@ -276,10 +291,10 @@ export default function App() {
       </div>
       <div className="nav-label">БИБЛИОТЕКА</div>
       <nav>{nav.map(({ name, icon: Icon }) => <button key={name} className={page === name ? "nav-item selected" : "nav-item"} onClick={() => setPage(name)}><Icon size={18} /><span>{name}</span></button>)}</nav>
-      <div className="sidebar-bottom"><div className="status-dot" /> Offline-режим <span className="version">v0.10.3</span></div>
+      <div className="sidebar-bottom"><div className="status-dot" /> Offline-режим <span className="version">v0.10.5</span></div>
     </aside>
     <main className="main">
-      <header className="topbar"><div className="crumb">L.o.S.A. <span>/</span> {page}</div><button className="icon-button" title="Справка" onClick={() => setNotice("L.o.S.A. 0.10.3 — улучшения интерфейса и запуска.")}><CircleHelp size={18} /></button></header>
+      <header className="topbar"><div className="crumb">L.o.S.A. <span>/</span> {page}</div><button className="icon-button" title="Справка" onClick={() => setNotice("L.o.S.A. 0.10.5 — социальные разделы и игровые сервисы.")}><CircleHelp size={18} /></button></header>
       {page === "Главная" && <section className="content">
         {instances.length === 0 ? <div className="hero"><div className="hero-copy"><div className="eyebrow"><Sparkles size={14} /> ВАШ MINECRAFT. ВАШИ ПРАВИЛА.</div><h1>Добро пожаловать<br /><em>в L.o.S.A.</em></h1><p>Создай первую сборку — LoSA сама подготовит игровые файлы и Java.</p><button className="primary" onClick={() => { setPage("Играть"); setShowCreate(true); }}><Plus size={16} /> Создать первую сборку</button></div><img className="hero-mark" src="/losa-logo.png" /></div>
         : <><div className="page-title"><div className="eyebrow">ТВОЙ ИГРОВОЙ ЦЕНТР</div><h1>С возвращением</h1><p>Недавно запускавшиеся сборки и быстрый переход к игре.</p></div><div className="section-head"><div><h2>Недавняя активность</h2><p>Сборки отсортированы по последнему запуску</p></div><button className="outline" onClick={() => { setPage("Играть"); setShowCreate(true); }}><Plus size={15} /> Новая сборка</button></div><div className="build-list">{recentInstances.map(instance => <BuildCard key={instance.id} instance={instance} />)}</div></>}
@@ -304,7 +319,60 @@ export default function App() {
         <div className="settings-card appearance-card"><div className="settings-heading"><div className="quick-icon"><Sparkles /></div><div><b>Внешний вид лаунчера</b><small>Тема и акцентный цвет сохраняются автоматически</small></div></div><label className="field-label">Тема интерфейса</label><div className="theme-options"><button type="button" className={theme === "dark" ? "theme-option active" : "theme-option"} aria-pressed={theme === "dark"} onClick={() => setTheme("dark")}>Тёмная</button><button type="button" className={theme === "light" ? "theme-option active" : "theme-option"} aria-pressed={theme === "light"} onClick={() => setTheme("light")}>Светлая</button></div><label className="field-label" htmlFor="losa-accent-color">Акцентный цвет</label><div className="accent-controls"><div className="accent-presets" role="group" aria-label="Готовые акцентные цвета">{accentPresets.map(preset => <button key={preset.color} type="button" className={accentColor.toLowerCase() === preset.color ? "accent-swatch selected" : "accent-swatch"} style={{ "--swatch": preset.color } as CSSProperties} onClick={() => setAccentColor(preset.color)} aria-label={preset.name} aria-pressed={accentColor.toLowerCase() === preset.color} title={preset.name} />)}</div><input id="losa-accent-color" className="accent-input" type="color" value={accentColor} onChange={e => setAccentColor(e.target.value)} aria-label="Выбрать произвольный акцентный цвет" /><span className="muted small">Готовые оттенки или любой свой цвет.</span><button className="outline" onClick={() => setAccentColor("#d8bd64")}>Сбросить</button></div></div>
         <div className="settings-card offline-profile-card"><div className="settings-heading"><div className="quick-icon"><Gamepad2 /></div><div><b>Локальный профиль (Offline)</b><small>Вход по игровому нику для локального тестирования</small></div><span className={offlineName ? "connected" : "disconnected"}>{offlineName ? "Активен" : "Не выбран"}</span></div><label className="field-label" htmlFor="offline-player-name">Игровой ник</label><input id="offline-player-name" className="wide-input" value={offlineNameDraft} onChange={e => setOfflineNameDraft(e.target.value)} maxLength={16} placeholder="Например, Steve_123" /><p className="muted small">От 3 до 16 символов: латинские буквы, цифры и подчёркивание.</p><button className="primary" onClick={saveOfflineProfile}>Сохранить локальный профиль</button></div>
       </section>}
-      {page !== "Главная" && page !== "Играть" && page !== "Настройки" && <section className="content empty-page"><div className="empty-icon">{page === "Друзья" ? <Users /> : page === "Моды и сборки" ? <Layers3 /> : <Server />}</div><div className="eyebrow">L.o.S.A. · В РАЗРАБОТКЕ</div><h1>{page}</h1><p>{page === "Друзья" ? "Здесь появятся список друзей, приглашения и совместные лобби." : page === "Моды и сборки" ? "Здесь появится каталог модов и управление ими." : "Здесь появятся избранные серверы и быстрые подключения."}</p><span className="coming">Этот раздел запланирован для следующих этапов</span></section>}
+
+      {page === "Лобби" && <section className="content community-content">
+        <div className="page-title"><div className="eyebrow"><Users size={13}/> L.o.S.A. COMMUNITY</div><h1>Общее лобби</h1><p>Место, где игроки встречаются, общаются и собираются в совместные игровые сессии.</p></div>
+        <div className="lobby-grid">
+          <div className="community-panel lobby-welcome"><div className="lobby-orbit"><Users size={34}/></div><div><span className="panel-kicker">СООБЩЕСТВО L.o.S.A.</span><h2>Играй вместе</h2><p>Находи друзей, создавай компании и переходи к любимым серверам.</p><button className="primary" onClick={() => setPage("Чат")}><MessageCircle size={15}/> Открыть чат</button></div></div>
+          <div className="community-panel online-panel"><div className="panel-heading"><div><b>Сейчас в L.o.S.A.</b><small>Демонстрационные профили</small></div><span className="online-indicator">● Онлайн</span></div><div className="online-count"><strong>128</strong><span>игроков в сети</span></div><div className="mini-avatars"><span>A</span><span>M</span><span>S</span><span>J</span><span>+124</span></div></div>
+          <div className="community-panel"><div className="panel-heading"><div><b>Быстрый старт</b><small>Выбери, куда отправиться</small></div></div><div className="lobby-actions"><button onClick={() => setPage("Список серверов")}><Globe/><span><b>Найти сервер</b><small>Открой список сообществ</small></span><ArrowUpRight/></button><button onClick={() => setPage("Друзья")}><Users/><span><b>Мои друзья</b><small>Собери свою компанию</small></span><ArrowUpRight/></button><button onClick={() => setPage("Приватные серверы")}><Crown/><span><b>Свой сервер</b><small>Создай отдельный мир</small></span><ArrowUpRight/></button></div></div>
+          <div className="community-panel activity-panel"><div className="panel-heading"><div><b>Активность сообщества</b><small>Пример ленты событий</small></div></div><div className="activity-row"><span className="activity-avatar">M</span><p><b>Mira</b> добавила сервер <strong>Cozy Survival</strong><small>8 минут назад</small></p></div><div className="activity-row"><span className="activity-avatar violet">A</span><p><b>Alex</b> создал новое лобби <strong>Вечернее выживание</strong><small>21 минуту назад</small></p></div><div className="activity-row"><span className="activity-avatar green">J</span><p><b>Jamie</b> поделился сборкой <strong>Vanilla Plus</strong><small>1 час назад</small></p></div></div>
+        </div><div className="prototype-note"><ShieldCheck size={16}/> Это макет сообщества: цифры и события демонстрационные. Онлайн-статусы появятся после подключения серверной части.</div>
+      </section>}
+      {page === "Список серверов" && <section className="content community-content">
+        <div className="page-title"><div className="eyebrow"><Globe size={13}/> DISCOVER</div><h1>Список серверов</h1><p>Подбирай миры по стилю игры, версии и изданию Minecraft.</p></div>
+        <div className="server-toolbar"><div className="search-field"><Search size={16}/><input value={serverQuery} onChange={e=>setServerQuery(e.target.value)} placeholder="Название сервера или режим…"/></div><div className="filter-pills">{(["Все","Java","Bedrock"] as const).map(v=><button key={v} className={serverEdition===v?"active":""} onClick={()=>setServerEdition(v)}>{v}</button>)}</div></div>
+        <div className="server-feature"><div className="server-feature-art"><span>✦</span></div><div><span className="panel-kicker">ВЫБОР СООБЩЕСТВА</span><h2>Найди свой следующий мир</h2><p>Выживание, мини-игры, творчество и приключения — всё в одном месте.</p></div></div>
+        <div className="server-results-head"><b>Популярные серверы</b><span>Примеры карточек · не реальные подключения</span></div>
+        <div className="server-grid">{[
+          {id:"block-haven",name:"Block Haven",mode:"Выживание",edition:"Java",version:"1.21.x",players:"248 / 500",tag:"Экономика",color:"blue"},
+          {id:"pixel-garden",name:"Pixel Garden",mode:"Творчество",edition:"Java",version:"1.20.4",players:"86 / 200",tag:"Строительство",color:"green"},
+          {id:"bedrock-world",name:"Bedrock World",mode:"Приключения",edition:"Bedrock",version:"1.21.x",players:"132 / 300",tag:"Кроссплей",color:"purple"},
+          {id:"redstone-lab",name:"Redstone Lab",mode:"Технический",edition:"Java",version:"1.21.x",players:"41 / 120",tag:"Redstone",color:"orange"}
+        ].filter(s=>(serverEdition==="Все"||s.edition===serverEdition)&&((s.name+" "+s.mode+" "+s.tag).toLowerCase().includes(serverQuery.toLowerCase()))).map(s=><article className="server-card" key={s.id}><div className={"server-card-art "+s.color}><span>{s.name.slice(0,1)}</span><button title="В избранное" className={favoriteServers.includes(s.id)?"favorite active":"favorite"} onClick={()=>setFavoriteServers(old=>old.includes(s.id)?old.filter(x=>x!==s.id):[...old,s.id])}><Heart size={16} fill={favoriteServers.includes(s.id)?"currentColor":"none"}/></button></div><div className="server-card-body"><div className="server-tags"><span>{s.edition}</span><span>{s.tag}</span></div><h3>{s.name}</h3><p>{s.mode} · Minecraft {s.version}</p><div className="server-card-foot"><span><i/> {s.players} игроков</span><button className="outline" onClick={()=>setNotice("Карточка сервера демонстрационная. Подключение станет доступно после каталога серверов.")}>Подробнее</button></div></div></article>)}</div>
+        <div className="prototype-note"><ShieldCheck size={16}/> Поиск, фильтр Java/Bedrock и избранное работают локально. Адреса и онлайн игроков пока демонстрационные.</div>
+      </section>}
+      {page === "Чат" && <section className="content community-content">
+        <div className="page-title"><div className="eyebrow"><MessageCircle size={13}/> MESSAGES</div><h1>Сообщения</h1><p>Общие комнаты и личные разговоры — в одном окне.</p></div>
+        <div className="chat-layout"><aside className="chat-sidebar"><div className="chat-side-title">КАНАЛЫ</div>{["Общий","Поиск команды","Обсуждение сборок"].map(ch=><button key={ch} className={chatChannel===ch?"chat-channel active":"chat-channel"} onClick={()=>setChatChannel(ch)}><MessageCircle size={15}/>{ch}{ch==="Общий"&&<i>3</i>}</button>)}<div className="chat-side-title direct-title">ЛИЧНЫЕ ЧАТЫ</div>{["Alex","Mira","Jamie"].map((n,i)=><button key={n} className="direct-chat" onClick={()=>{setChatChannel(n);setNotice("Личные переписки подключим вместе с аккаунтами L.o.S.A.");}}><span className={"direct-avatar d"+i}>{n[0]}</span>{n}<span className="presence-dot"/></button>)}</aside>
+          <div className="chat-main"><div className="chat-head"><div><b># {chatChannel}</b><small>Демонстрационная комната</small></div><span><Users size={14}/> 24 участника</span></div><div className="chat-feed">{chatMessages.filter(m=>m.channel===chatChannel).map(m=><div className={m.own?"chat-message own":"chat-message"} key={m.id}><span className="chat-avatar">{m.author.slice(0,1)}</span><div><div className="chat-message-meta"><b>{m.author}</b><time>{m.time}</time></div><p>{m.text}</p></div></div>)}{chatMessages.filter(m=>m.channel===chatChannel).length===0&&<div className="chat-empty">Пока тихо. Начни разговор первым.</div>}</div><form className="chat-composer" onSubmit={e=>{e.preventDefault();if(!chatDraft.trim())return;setChatMessages(old=>[...old,{id:Date.now(),channel:chatChannel,author:offlineName||"Гость",text:chatDraft.trim(),time:new Date().toLocaleTimeString("ru-RU",{hour:"2-digit",minute:"2-digit"}),own:true}]);setChatDraft("");}}><input value={chatDraft} onChange={e=>setChatDraft(e.target.value)} placeholder="Написать сообщение…" aria-label="Сообщение"/><button className="primary" type="submit" disabled={!chatDraft.trim()}><Send size={15}/></button></form></div></div>
+        <div className="prototype-note"><ShieldCheck size={16}/> Сообщения сейчас сохраняются только в состоянии этого окна и не отправляются другим игрокам.</div>
+      </section>}
+      {page === "Магазин" && <section className="content community-content">
+        <div className="page-title"><div className="eyebrow"><Store size={13}/> L.o.S.A. STORE</div><h1>Магазин</h1><p>Косметика, которая помогает выразить свой стиль в игре и профиле.</p></div>
+        <div className="store-hero"><div><span className="panel-kicker">ТВОЙ СТИЛЬ — ТВОИ ПРАВИЛА</span><h2>Сделай профиль<br/>узнаваемым</h2><p>Накидки, спутники, ауры, эмоции и оформление профиля.</p></div><div className="store-hero-gem">✧</div></div>
+        <div className="store-toolbar">{["Все","Накидки","Спутники","Ауры","Эмоции","Рамки"].map(c=><button key={c} className={storeCategory===c?"active":""} onClick={()=>setStoreCategory(c)}>{c}</button>)}</div>
+        <div className="store-grid">{[
+          {name:"Северное сияние",kind:"Накидки",price:"Косметика",glyph:"✦",tone:"aurora"},
+          {name:"Лис-компаньон",kind:"Спутники",price:"Косметика",glyph:"◆",tone:"fox"},
+          {name:"Звёздная аура",kind:"Ауры",price:"Косметика",glyph:"✧",tone:"star"},
+          {name:"Победный жест",kind:"Эмоции",price:"Анимация",glyph:"★",tone:"emote"},
+          {name:"Рамка созвездия",kind:"Рамки",price:"Профиль",glyph:"◇",tone:"frame"},
+          {name:"Лунный след",kind:"Ауры",price:"Эффект",glyph:"☾",tone:"moon"}
+        ].filter(x=>storeCategory==="Все"||x.kind===storeCategory).map(x=><article className="store-card" key={x.name}><div className={"store-art "+x.tone}><span>{x.glyph}</span><i>ПРЕДМЕТ</i></div><div className="store-item-info"><div><h3>{x.name}</h3><small>{x.kind} · {x.price}</small></div><button className="outline" onClick={()=>setNotice("Витрина пока демонстрационная. Реальные покупки и инвентарь появятся после подключения магазина.")}>Скоро</button></div></article>)}</div>
+        <div className="prototype-note"><ShieldCheck size={16}/> Витрина и категории готовы как интерфейс. Баланс, инвентарь и покупки пока отключены.</div>
+      </section>}
+      {page === "Приватные серверы" && <section className="content community-content">
+        <div className="page-title"><div className="eyebrow"><Crown size={13}/> PRIVATE WORLDS</div><h1>Приватные серверы</h1><p>Собственный мир для друзей, команды или большого сообщества.</p></div>
+        <div className="private-hero"><div><span className="panel-kicker">ТВОЙ МИР · ТВОИ ПРАВИЛА</span><h2>Сервер, который<br/>собирает друзей</h2><p>Настройки мира, доступ по приглашению и управление участниками — в одном месте.</p><button className="primary" onClick={()=>document.getElementById("private-create")?.scrollIntoView({behavior:"smooth",block:"center"})}><Plus size={15}/> Создать сервер</button></div><div className="private-hero-icon"><Server size={58}/></div></div>
+        <div className="plan-grid"><article className="plan-card"><span className="plan-label">СТАРТ</span><h3>Private</h3><p>Для небольшой компании друзей</p><div className="plan-spec"><span><Users/> До 5 игроков</span><span><Cpu/> Базовые ресурсы</span><span><Shield/> Закрытый доступ</span></div><button className="outline" onClick={()=>setNotice("Тарифы пока представлены как макет. Создание реального сервера будет подключено позже.")}>Подробнее</button></article><article className="plan-card featured"><span className="plan-label vip"><Crown size={12}/> VIP</span><h3>VIP World</h3><p>Больше возможностей и контроля</p><div className="plan-spec"><span><Users/> До 20 игроков</span><span><Cpu/> Расширенные ресурсы</span><span><HardDrive/> Больше места для мира</span></div><button className="primary" onClick={()=>setNotice("VIP — концепция тарифа. Оплата и выделение ресурсов пока не подключены.")}>VIP · Скоро</button></article><article className="plan-card"><span className="plan-label vipplus"><Crown size={12}/> VIP++</span><h3>VIP++ World</h3><p>Для крупных игровых компаний</p><div className="plan-spec"><span><Users/> До 50 игроков</span><span><Cpu/> Максимальные ресурсы</span><span><HardDrive/> Приоритетное место</span></div><button className="outline" onClick={()=>setNotice("VIP++ — концепция тарифа. Оплата и выделение ресурсов пока не подключены.")}>VIP++ · Скоро</button></article></div>
+        <div className="community-panel private-create" id="private-create"><div className="panel-heading"><div><b>Мои приватные серверы</b><small>Локальные черновики конфигураций</small></div><span className="coming">Демо</span></div><div className="private-create-row"><input value={privateServerName} onChange={e=>setPrivateServerName(e.target.value)} placeholder="Название будущего сервера" maxLength={32}/><button className="primary" disabled={!privateServerName.trim()} onClick={()=>{setPrivateServerDrafts(old=>[...old,privateServerName.trim()]);setPrivateServerName("");setNotice("Черновик сервера добавлен локально. Он ещё не запущен в сети.");}}><Plus size={15}/> Добавить черновик</button></div>{privateServerDrafts.map((name,i)=><div className="private-draft" key={i}><Server size={16}/><b>{name}</b><span>Черновик · не запущен</span></div>)}</div>
+        <div className="prototype-note"><ShieldCheck size={16}/> VIP/VIP++ здесь показаны как будущие тарифы. Серверы, ресурсы и платежи ещё не подключены.</div>
+      </section>}
+      {page === "Друзья" && <section className="content community-content"><div className="page-title"><div className="eyebrow"><Users size={13}/> COMMUNITY</div><h1>Друзья</h1><p>Твой круг игроков в L.o.S.A. — независимо от издания Minecraft.</p></div><div className="community-panel friends-empty"><Users size={30}/><h2>Твоя команда начинается здесь</h2><p>Поиск игроков, заявки в друзья и совместные лобби подключим к системе аккаунтов L.o.S.A.</p><button className="outline" onClick={()=>setPage("Лобби")}>Вернуться в лобби</button></div><div className="prototype-note"><ShieldCheck size={16}/> Пока используется локальный Offline-профиль. Общие друзья появятся после запуска аккаунтов.</div></section>}
+      {page === "Серверы" && <section className="content community-content"><div className="page-title"><div className="eyebrow">SERVER TOOLS</div><h1>Серверы</h1><p>Быстрые подключения и управление избранными адресами будут связаны с каталогом серверов.</p></div><div className="community-panel friends-empty"><Server size={30}/><h2>Твои подключения</h2><p>Переходи к общему каталогу, чтобы изучить макет серверов.</p><button className="primary" onClick={()=>setPage("Список серверов")}>Открыть список серверов</button></div></section>}
+      {page === "Моды и сборки" && <section className="content empty-page"><div className="empty-icon"><Layers3/></div><div className="eyebrow">L.o.S.A. · MODS</div><h1>Моды и сборки</h1><p>Каталог модов и управление зависимостями будут добавлены отдельным этапом.</p><span className="coming">Каталог готовится</span></section>}
+
       {(error || notice) && <div className={error ? "toast error-toast" : "toast"} onClick={() => { setError(""); setNotice(""); }}>{error || notice}<button aria-label="Закрыть">×</button></div>}
       <footer><span>© 2026 L.o.S.A.</span></footer>
     </main>
