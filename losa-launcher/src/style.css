@@ -72,3 +72,14 @@ button,.outline,.primary,.quick-card,.nav-item,.settings-card,.build-card,.file-
 .avatar-option.selected{border:2px solid #d8bd64;background:#353124;box-shadow:0 0 0 2px #d8bd6430}
 @media(max-width:900px){.avatar-picker{gap:8px}}
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{scroll-behavior:auto!important;transition-duration:.01ms!important;animation-duration:.01ms!important;animation-iteration-count:1!important}}
+
+/* Follow-up polish: distinct build emblems, complete expand animation and compact cards */
+.build-details{display:grid;grid-template-rows:0fr;padding:0 17px;border-top:0 solid transparent;opacity:0;transform:translateY(-9px);transition:grid-template-rows 360ms cubic-bezier(.2,.72,.18,1),padding 360ms cubic-bezier(.2,.72,.18,1),opacity 280ms ease,transform 360ms cubic-bezier(.2,.72,.18,1),border-width 360ms ease;overflow:hidden}
+.build-details-inner{min-height:0;overflow:hidden}
+.build-details.expanded{grid-template-rows:1fr;padding:15px 17px 16px;border-top-width:1px;opacity:1;transform:translateY(0)}
+.build-card-top{min-height:72px;padding:11px 14px}
+.build-card{height:auto;align-self:start}
+.build-logo img{image-rendering:pixelated}
+button:not(:disabled):hover,.outline:not(:disabled):hover,.primary:not(:disabled):hover{transform:translateY(-1px) scale(1.025);box-shadow:0 5px 16px #0003}
+button:active:not(:disabled),.outline:active:not(:disabled),.primary:active:not(:disabled){transform:translateY(0) scale(.985);transition-duration:90ms}
+button:focus-visible{outline:2px solid var(--accent,#d8bd64);outline-offset:3px}
