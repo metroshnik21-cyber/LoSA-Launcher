@@ -4,6 +4,7 @@ import { getMinecraftVersions, type MinecraftVersion } from "./lib/minecraft";
 import { invoke } from "@tauri-apps/api/core";
 import { checkModCompatibility, type ModrinthVersionInfo } from "./lib/mod-compatibility";
 import { Cosmetic3DEditor } from "./components/Cosmetic3DEditor";
+import { BedrockManager } from "./components/BedrockManager";
 
 type Page = "Главная" | "Играть" | "Лобби" | "Друзья" | "Чат" | "Магазин" | "Мастерская" | "Моды и сборки" | "Серверы" | "Настройки";
 type LauncherInstance = {
@@ -253,11 +254,7 @@ function ModsAndPacks() {
         <p className="mods-footnote">Пока доступен поиск и просмотр каталога. Установка файла в выбранную сборку и автоматическая проверка зависимостей будут подключены следующим техническим шагом — кнопка установки не имитируется.</p>
       </div>}
       <p className="mods-footnote">Источник каталога: Modrinth API. Загрузка и установка отдельных файлов в папку сборки пока не включены.</p>
-    </> : <div className="bedrock-hub">
-      <div className="bedrock-banner"><div className="bedrock-mark">B</div><div><span className="panel-kicker">ОТДЕЛЬНОЕ ИЗДАНИЕ</span><h2>Bedrock Edition</h2><p>Аддоны, наборы ресурсов и миры будут управляться отдельно от Java-модов.</p></div></div>
-      <div className="bedrock-grid"><article><b>Аддоны</b><span>.mcaddon · .mcpack</span><small>Каталог и установка аддонов — следующий этап</small></article><article><b>Ресурспаки</b><span>Текстуры и звуки</span><small>Импорт и управление наборами ресурсов</small></article><article><b>Миры и шаблоны</b><span>.mcworld</span><small>Отдельная библиотека миров Bedrock</small></article><article><b>Совместимость</b><span>Bedrock build + зависимости</span><small>Проверку будет выполнять отдельный скрипт</small></article></div>
-      <div className="prototype-note"><ShieldCheck size={16}/> Bedrock не использует Java-загрузчики Fabric/Forge. Для него будут отдельные каталоги, форматы файлов и сценарии установки. Этот экран — начало отдельного Bedrock-раздела, не готовый установщик.</div>
-    </div>}
+    </> : <BedrockManager />
   </section>;
 }
 
