@@ -160,7 +160,7 @@ export default function App() {
     const expanded = expandedId === instance.id;
     return <article className="build-card">
       <div className="build-card-top" onClick={() => setExpandedId(expanded ? null : instance.id)} role="button" tabIndex={0}
-        onKeyDown={event => { if (event.key === "Enter" || event.key === " ") setExpandedId(expanded ? null : instance.id); }}>
+        onKeyDown={event => { if (event.target === event.currentTarget && (event.key === "Enter" || event.key === " ")) setExpandedId(expanded ? null : instance.id); }}>
         <div className="build-logo">{instance.iconDataUrl ? <img src={instance.iconDataUrl} alt="" /> : <span>{instance.name.slice(0, 1).toUpperCase()}</span>}</div>
         <div className="build-summary"><b>{instance.name}</b><small>Minecraft {instance.versionId} · Java Edition · Vanilla</small></div>
         <span className="build-last-played">{dateLabel(instance.lastPlayedAt)}</span>
