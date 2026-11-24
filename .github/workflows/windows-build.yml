@@ -13,6 +13,7 @@ on:
       - "feature/accent-presets-0.10.4"
       - "feature/community-polish-0.10.6"
       - "feature/bedrock-mods-workshop-0.10.8"
+      - "feature/bedrock-runtime-0.10.10"
   push:
     branches:
       - "feature/v0.8-minecraft-launch"
@@ -22,6 +23,7 @@ on:
       - "feature/launcher-experience-0.10"
       - "feature/referrals-and-roles-0.10.7"
       - "feature/bedrock-mods-workshop-0.10.8"
+      - "feature/bedrock-runtime-0.10.10"
     tags:
       - "v*"
 
