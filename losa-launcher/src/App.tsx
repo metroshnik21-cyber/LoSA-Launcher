@@ -13,15 +13,23 @@ const nav: { name: Page; icon: typeof Home }[] = [
   { name: "Моды и сборки", icon: Layers3 }, { name: "Серверы", icon: Server }, { name: "Настройки", icon: Settings }
 ];
 
-const avatarPalettes = Array.from({ length: 49 }, (_, i) => ({
-  skin: ["#e7b58a", "#c98b63", "#f0c9a0", "#9b654b", "#d9a078", "#f2d2b5", "#b97852"][i % 7],
-  hair: ["#4b3027", "#302a25", "#8b512d", "#d8a34c", "#5b6570", "#25252b", "#a34e37"][Math.floor(i / 7)],
-  shirt: ["#347c55", "#477da8", "#a64b49", "#8d65a6", "#d4a33d", "#4c555b", "#d5d8d2"][i % 7],
-  bg: ["#b8a18c", "#d5bd83", "#8c9a9e", "#b77b75", "#6e8c63", "#c6c6b4", "#a9a1bd"][Math.floor(i / 7)]
-}));
+const logoGlyphs = [
+  "⚔", "⛏", "🛡", "💎", "🔥", "❄", "⚡",
+  "♜", "♞", "♟", "◆", "◇", "✦", "✧",
+  "☀", "☾", "☘", "♣", "♠", "♥", "♦",
+  "⚒", "⚙", "⌘", "⌬", "✪", "✺", "✹",
+  "▲", "▼", "◈", "⬟", "⬢", "✵", "✷",
+  "☠", "☯", "♛", "♚", "⚑", "⚒", "⛨",
+  "🌙", "🌿", "🪨", "🌀", "🌋", "🌊", "🌌"
+];
+const logoPalettes = [
+  ["#293c4b", "#8dc8e8"], ["#49382a", "#e1b36b"], ["#35463d", "#a9d5b0"], ["#3e3454", "#c4a7f2"], ["#542f2a", "#ff9a69"], ["#294653", "#9de4ed"], ["#4b4325", "#f3d66f"],
+  ["#303b58", "#a9b9f5"], ["#4b3c2d", "#e7bd86"], ["#444444", "#d6d6d6"], ["#4a3340", "#e8a8c4"], ["#29433e", "#9bd8c0"], ["#4a3d59", "#d0b7f2"], ["#3e4650", "#c6d6e8"]
+];
 const avatarData = (index: number) => {
-  const p = avatarPalettes[index % avatarPalettes.length];
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" shape-rendering="crispEdges"><rect width="48" height="48" fill="${p.bg}"/><rect x="7" y="5" width="34" height="13" fill="${p.hair}"/><rect x="5" y="12" width="7" height="23" fill="${p.hair}"/><rect x="36" y="12" width="7" height="23" fill="${p.hair}"/><rect x="11" y="12" width="26" height="23" fill="${p.skin}"/><rect x="15" y="20" width="5" height="5" fill="#28282a"/><rect x="29" y="20" width="5" height="5" fill="#28282a"/><rect x="20" y="29" width="9" height="3" fill="#874d45"/><rect x="8" y="36" width="32" height="12" fill="${p.shirt}"/><rect x="5" y="43" width="38" height="5" fill="#25282b"/></svg>`;
+  const glyph = logoGlyphs[index % logoGlyphs.length];
+  const palette = logoPalettes[index % logoPalettes.length];
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" shape-rendering="crispEdges"><rect width="64" height="64" rx="8" fill="${palette[0]}"/><path d="M8 8h48v48H8z" fill="none" stroke="${palette[1]}" stroke-width="3"/><path d="M13 13h38v38H13z" fill="none" stroke="${palette[1]}" stroke-opacity=".35" stroke-width="2"/><text x="32" y="43" text-anchor="middle" font-size="34" font-family="Segoe UI Symbol,Apple Symbols,sans-serif" fill="${palette[1]}">${glyph}</text></svg>`;
   return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
 };
 
@@ -173,16 +181,18 @@ export default function App() {
         <ChevronDown size={17} className={expanded ? "build-chevron open" : "build-chevron"} />
       </div>
       <div className={expanded ? "build-details expanded" : "build-details"} aria-hidden={!expanded}>
-        {editingId === instance.id ? <div className="edit-build">
-          <label>Название сборки<input value={editName} maxLength={40} onChange={e => setEditName(e.target.value)} /></label>
-          <label className="field-label">Логотип сборки</label><IconPicker selected={editIconIndex} onSelect={index => { setEditIconIndex(index); setEditIcon(null); }} />
-          {(editIcon || editIconIndex !== null) && <img className="edit-preview" src={editIcon ?? avatarData(editIconIndex!)} alt="Новый логотип" />}
-          <div className="detail-actions"><button className="primary" onClick={() => void saveEdit(instance)}>Сохранить</button><button className="outline" onClick={() => setEditingId(null)}>Отмена</button></div>
-        </div> : <>
-          <div className="detail-grid"><div><small>Версия игры</small><b>{instance.versionId}</b></div><div><small>Платформа</small><b>Java Edition</b></div><div><small>Загрузчик</small><b>Vanilla</b></div><div><small>Последний запуск</small><b>{dateLabel(instance.lastPlayedAt)}</b></div></div>
-          <p className="muted small">Папка миров и настроек этой сборки хранится отдельно. Клиент, библиотеки, ресурсы и Java подготавливаются автоматически.</p>
-          <div className="detail-actions"><button className="outline" onClick={() => beginEdit(instance)}><Pencil size={14} /> Изменить</button><button className="outline danger-action" onClick={() => void removeBuild(instance)}><Trash2 size={14} /> Удалить</button></div>
-        </>}
+        <div className="build-details-inner">
+          {editingId === instance.id ? <div className="edit-build">
+            <label>Название сборки<input value={editName} maxLength={40} onChange={e => setEditName(e.target.value)} /></label>
+            <label className="field-label">Логотип сборки</label><IconPicker selected={editIconIndex} onSelect={index => { setEditIconIndex(index); setEditIcon(null); }} />
+            {(editIcon || editIconIndex !== null) && <img className="edit-preview" src={editIcon ?? avatarData(editIconIndex!)} alt="Новый логотип" />}
+            <div className="detail-actions"><button className="primary" onClick={() => void saveEdit(instance)}>Сохранить</button><button className="outline" onClick={() => setEditingId(null)}>Отмена</button></div>
+          </div> : <>
+            <div className="detail-grid"><div><small>Версия игры</small><b>{instance.versionId}</b></div><div><small>Платформа</small><b>Java Edition</b></div><div><small>Загрузчик</small><b>Vanilla</b></div><div><small>Последний запуск</small><b>{dateLabel(instance.lastPlayedAt)}</b></div></div>
+            <p className="muted small">Папка миров и настроек этой сборки хранится отдельно. Клиент, библиотеки, ресурсы и Java подготавливаются автоматически.</p>
+            <div className="detail-actions"><button className="outline" onClick={() => beginEdit(instance)}><Pencil size={14} /> Изменить</button><button className="outline danger-action" onClick={() => void removeBuild(instance)}><Trash2 size={14} /> Удалить</button></div>
+          </>}
+        </div>
       </div>
     </article>;
   };
