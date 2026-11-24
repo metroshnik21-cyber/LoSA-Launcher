@@ -1092,7 +1092,11 @@ fn parse_java_major(output: &str) -> Option<u32> {
 #[tauri::command]
 fn detect_java() -> String {
     #[cfg(target_os = "windows")]
-    let lookup = std::process::Command::new("where.exe").arg("java.exe").output();
+    let lookup = {
+        let mut command = std::process::Command::new("where.exe");
+        suppress_console_window(&mut command);
+        command.arg("java.exe").output()
+    };
     #[cfg(not(target_os = "windows"))]
     let lookup = std::process::Command::new("which").arg("java").output();
 
