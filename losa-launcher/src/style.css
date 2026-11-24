@@ -285,3 +285,8 @@ button:focus-visible{outline:2px solid var(--accent,#d8bd64);outline-offset:3px}
 .theme-light .referral-track{background:#dce2e5}
 .theme-light .role-row{background:#fff;border-color:#c5cfd4}
 @media(max-width:620px){.role-row{align-items:flex-start}.role-tag{white-space:normal;text-align:right;max-width:95px}}
+
+
+/* Keep the navigation fixed in view while long pages scroll. */
+.sidebar{position:sticky;top:0;height:100vh;align-self:flex-start;overflow-y:auto;}
+.main{min-height:100vh;}
