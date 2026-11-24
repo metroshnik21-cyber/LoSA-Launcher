@@ -1,6 +1,6 @@
 [package]
 name = "losa-launcher"
-version = "0.9.1"
+version = "0.9.2"
 description = "L.o.S.A. Launcher of Spark Anvil"
 authors = ["Spark_Anvil"]
 edition = "2021"
@@ -19,6 +19,7 @@ reqwest = { version = "0.12", features = ["json", "rustls-tls"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 sha1 = "0.10"
+md5 = "0.7"
 futures-util = "0.3"
 tokio = { version = "1", features = ["time"] }
 zip = { version = "2", default-features = false, features = ["deflate"] }

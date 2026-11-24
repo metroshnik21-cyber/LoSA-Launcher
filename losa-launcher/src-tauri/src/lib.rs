@@ -69,6 +69,24 @@ fn auth_error(message: impl Into<String>) -> String {
     message.into()
 }
 
+fn is_valid_offline_name(name: &str) -> bool {
+    (3..=16).contains(&name.len())
+        && name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
+}
+
+fn offline_uuid(name: &str) -> String {
+    let digest = md5::compute(format!("OfflinePlayer:{name}"));
+    let mut bytes = digest.0;
+    bytes[6] = (bytes[6] & 0x0f) | 0x30;
+    bytes[8] = (bytes[8] & 0x3f) | 0x80;
+    format!(
+        "{:02x}{:02x}{:02x}{:02x}-{:02x}{:02x}-{:02x}{:02x}-{:02x}{:02x}-{:02x}{:02x}{:02x}{:02x}{:02x}{:02x}",
+        bytes[0], bytes[1], bytes[2], bytes[3], bytes[4], bytes[5],
+        bytes[6], bytes[7], bytes[8], bytes[9], bytes[10], bytes[11],
+        bytes[12], bytes[13], bytes[14], bytes[15]
+    )
+}
+
 fn is_client_id_format(value: &str) -> bool {
     let parts: Vec<&str> = value.split('-').collect();
     parts.len() == 5
@@ -589,22 +607,135 @@ fn library_rule_allows(library: &serde_json::Value) -> bool {
     }
     allowed
 }
+
+fn java_major_at(path: &std::path::Path) -> Option<u32> {
+    let output = std::process::Command::new(path).arg("-version").output().ok()?;
+    let text = format!("{}\n{}", String::from_utf8_lossy(&output.stdout), String::from_utf8_lossy(&output.stderr));
+    parse_java_major(&text)
+}
+
+fn find_java_executable(directory: &std::path::Path) -> Option<std::path::PathBuf> {
+    let direct = directory.join("bin").join("java.exe");
+    if direct.is_file() { return Some(direct); }
+    let entries = std::fs::read_dir(directory).ok()?;
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.is_dir() {
+            if let Some(found) = find_java_executable(&path) { return Some(found); }
+        }
+    }
+    None
+}
+
+async fn ensure_java_runtime(required_major: u32, root: &std::path::Path) -> Result<std::path::PathBuf, String> {
+    #[cfg(target_os = "windows")]
+    let lookup = std::process::Command::new("where.exe").arg("java.exe").output();
+    #[cfg(not(target_os = "windows"))]
+    let lookup = std::process::Command::new("which").arg("java").output();
+
+    if let Some(system_java) = lookup.ok().filter(|o| o.status.success())
+        .and_then(|o| String::from_utf8_lossy(&o.stdout).lines().next().map(str::trim).filter(|s| !s.is_empty()).map(std::path::PathBuf::from)) {
+        if java_major_at(&system_java).is_some_and(|major| major >= required_major) {
+            return Ok(system_java);
+        }
+    }
+
+    let runtime_major = if required_major == 16 { 17 } else { required_major };
+    let runtime_dir = root.join("runtime").join(format!("java-{runtime_major}"));
+    if let Some(java) = find_java_executable(&runtime_dir) {
+        if java_major_at(&java).is_some_and(|major| major >= required_major) { return Ok(java); }
+    }
+
+    let url = format!("https://api.adoptium.net/v3/binary/latest/{runtime_major}/ga/windows/x64/jre/hotspot/normal/eclipse");
+    let client = reqwest::Client::builder().user_agent("L.o.S.A. Launcher").build()
+        .map_err(|e| format!("Не удалось подготовить загрузку Java: {e}"))?;
+    let response = client.get(&url).send().await
+        .map_err(|e| format!("Не удалось скачать Java {runtime_major}: {e}"))?;
+    if !response.status().is_success() {
+        return Err(format!("Сервис Java вернул HTTP {} для версии {runtime_major}.", response.status()));
+    }
+    let archive_bytes = response.bytes().await
+        .map_err(|e| format!("Не удалось прочитать архив Java: {e}"))?;
+    if archive_bytes.len() > 300 * 1024 * 1024 {
+        return Err("Архив Java неожиданно большой; установка остановлена.".into());
+    }
+
+    let runtime_parent = root.join("runtime");
+    std::fs::create_dir_all(&runtime_parent).map_err(|e| format!("Не удалось создать папку Java: {e}"))?;
+    let temp_dir = runtime_parent.join(format!("java-{runtime_major}.installing"));
+    if temp_dir.exists() { std::fs::remove_dir_all(&temp_dir).map_err(|e| format!("Не удалось очистить временную папку Java: {e}"))?; }
+    std::fs::create_dir_all(&temp_dir).map_err(|e| format!("Не удалось подготовить установку Java: {e}"))?;
+    let extraction = (|| -> Result<(), String> {
+        let cursor = std::io::Cursor::new(archive_bytes);
+        let mut archive = zip::ZipArchive::new(cursor).map_err(|e| format!("Архив Java повреждён: {e}"))?;
+        for index in 0..archive.len() {
+            let mut entry = archive.by_index(index).map_err(|e| format!("Не удалось прочитать архив Java: {e}"))?;
+            let Some(relative) = entry.enclosed_name().map(|p| p.to_path_buf()) else { continue };
+            if entry.unix_mode().is_some_and(|mode| mode & 0o170000 == 0o120000) { continue; }
+            let destination = temp_dir.join(relative);
+            if entry.is_dir() {
+                std::fs::create_dir_all(&destination).map_err(|e| format!("Не удалось создать папку Java: {e}"))?;
+            } else {
+                if let Some(parent) = destination.parent() { std::fs::create_dir_all(parent).map_err(|e| format!("Не удалось создать папку Java: {e}"))?; }
+                let mut output = std::fs::File::create(&destination).map_err(|e| format!("Не удалось сохранить файл Java: {e}"))?;
+                std::io::copy(&mut entry, &mut output).map_err(|e| format!("Не удалось распаковать Java: {e}"))?;
+            }
+        }
+        Ok(())
+    })();
+    if let Err(error) = extraction {
+        let _ = std::fs::remove_dir_all(&temp_dir);
+        return Err(error);
+    }
+    let java = find_java_executable(&temp_dir)
+        .ok_or_else(|| "В архиве Java не найден java.exe.".to_string())?;
+    if !java_major_at(&java).is_some_and(|major| major >= required_major) {
+        let _ = std::fs::remove_dir_all(&temp_dir);
+        return Err("Загруженная Java не прошла проверку версии.".into());
+    }
+    if runtime_dir.exists() { std::fs::remove_dir_all(&runtime_dir).map_err(|e| format!("Не удалось заменить старую Java: {e}"))?; }
+    std::fs::rename(&temp_dir, &runtime_dir).map_err(|e| format!("Не удалось завершить установку Java: {e}"))?;
+    find_java_executable(&runtime_dir).ok_or_else(|| "Java установлена, но java.exe не найден.".into())
+}
+
 fn expand_game_argument(raw: &str, values: &std::collections::HashMap<String, String>) -> String {
     let mut result = raw.to_string();
     for (key, value) in values { result = result.replace(&format!("${{{key}}}"), value); }
     result
 }
-fn append_metadata_arguments(target: &mut Vec<String>, source: Option<&serde_json::Value>, values: &std::collections::HashMap<String, String>) {
+fn argument_rule_matches(rule: &serde_json::Value, features: &std::collections::HashMap<String, bool>) -> bool {
+    let os_matches = rule.get("os").and_then(|v| v.get("name")).and_then(|v| v.as_str())
+        .map(|name| name == "windows").unwrap_or(true);
+    if !os_matches { return false; }
+
+    if let Some(required_features) = rule.get("features").and_then(|v| v.as_object()) {
+        for (name, expected) in required_features {
+            let expected = expected.as_bool().unwrap_or(false);
+            let actual = features.get(name).copied().unwrap_or(false);
+            if actual != expected { return false; }
+        }
+    }
+    true
+}
+
+fn append_metadata_arguments(
+    target: &mut Vec<String>,
+    source: Option<&serde_json::Value>,
+    values: &std::collections::HashMap<String, String>,
+    features: &std::collections::HashMap<String, bool>,
+) {
     let Some(items) = source.and_then(|v| v.as_array()) else { return };
     for item in items {
-        let (allowed, raw_values) = if let Some(text) = item.as_str() { (true, vec![text.to_string()]) }
-        else if let Some(object) = item.as_object() {
+        let (allowed, raw_values) = if let Some(text) = item.as_str() {
+            (true, vec![text.to_string()])
+        } else if let Some(object) = item.as_object() {
             let mut allowed = true;
             if let Some(rules) = object.get("rules").and_then(|v| v.as_array()) {
                 allowed = false;
                 for rule in rules {
-                    let os_ok = rule.get("os").and_then(|v| v.get("name")).and_then(|v| v.as_str()).map(|name| name == "windows").unwrap_or(true);
-                    if os_ok { allowed = rule.get("action").and_then(|v| v.as_str()) == Some("allow"); }
+                    if argument_rule_matches(rule, features) {
+                        allowed = rule.get("action").and_then(|v| v.as_str()) == Some("allow");
+                    }
                 }
             }
             let vals = match object.get("value") {
@@ -613,16 +744,34 @@ fn append_metadata_arguments(target: &mut Vec<String>, source: Option<&serde_jso
                 _ => Vec::new(),
             };
             (allowed, vals)
-        } else { (false, Vec::new()) };
-        if allowed { target.extend(raw_values.iter().map(|v| expand_game_argument(v, values))); }
+        } else {
+            (false, Vec::new())
+        };
+        if allowed {
+            target.extend(raw_values.iter().map(|v| expand_game_argument(v, values)));
+        }
     }
 }
 #[tauri::command]
-async fn launch_minecraft(version_id: String, auth_state: tauri::State<'_, std::sync::Mutex<Option<MinecraftAuthSession>>>) -> Result<u32, String> {
+async fn launch_minecraft(version_id: String, auth_mode: String, offline_name: Option<String>, auth_state: tauri::State<'_, std::sync::Mutex<Option<MinecraftAuthSession>>>) -> Result<u32, String> {
     let version_id = version_id.trim();
     if version_id.is_empty() || !version_id.chars().next().is_some_and(|c| c.is_ascii_digit()) || !version_id.chars().all(|c| c.is_ascii_alphanumeric() || c == '.' || c == '-' || c == '_') { return Err("Некорректный идентификатор версии Minecraft.".into()); }
-    let session = auth_state.lock().map_err(|_| "Не удалось проверить игровую сессию.".to_string())?.clone()
-        .ok_or_else(|| "Сначала войди через Microsoft в разделе «Настройки».".to_string())?;
+    let (profile, access_token, user_type) = match auth_mode.as_str() {
+        "microsoft" => {
+            let session = auth_state.lock().map_err(|_| "Не удалось проверить игровую сессию.".to_string())?.clone()
+                .ok_or_else(|| "Сначала войди через Microsoft в разделе «Настройки».".to_string())?;
+            (session.profile, session.access_token, "msa".to_string())
+        }
+        "offline" => {
+            let name = offline_name.unwrap_or_default().trim().to_string();
+            if !is_valid_offline_name(&name) {
+                return Err("Некорректный ник Offline-профиля: нужно 3–16 символов (A–Z, a–z, 0–9, _).".into());
+            }
+            let profile = MinecraftProfile { id: offline_uuid(&name), name };
+            (profile, "0".to_string(), "legacy".to_string())
+        }
+        _ => return Err("Неизвестный способ авторизации Minecraft.".into()),
+    };
     let app_data = std::env::var_os("APPDATA").map(std::path::PathBuf::from).ok_or_else(|| "Не найдена папка APPDATA Windows.".to_string())?;
     let root = app_data.join("L-o-S-A");
     let version_dir = root.join("versions").join(version_id);
@@ -631,19 +780,12 @@ async fn launch_minecraft(version_id: String, auth_state: tauri::State<'_, std::
     let metadata: serde_json::Value = serde_json::from_slice(&metadata_bytes).map_err(|e| format!("Метаданные Minecraft повреждены: {e}"))?;
     let client_jar = version_dir.join(format!("{version_id}.jar"));
     if !client_jar.is_file() { return Err("Не найден клиентский JAR. Повтори установку клиента.".into()); }
-    #[cfg(target_os = "windows")]
-    let lookup = std::process::Command::new("where.exe").arg("java.exe").output();
-    #[cfg(not(target_os = "windows"))]
-    let lookup = std::process::Command::new("which").arg("java").output();
-    let java = lookup.ok().filter(|o| o.status.success()).and_then(|o| String::from_utf8_lossy(&o.stdout).lines().next().map(str::trim).filter(|s| !s.is_empty()).map(str::to_string))
-        .ok_or_else(|| "Java не найдена. Установи совместимую Java и добавь её в PATH.".to_string())?;
-    let java_output = std::process::Command::new(&java).arg("-version").output().map_err(|e| format!("Не удалось запустить Java ({java}): {e}"))?;
-    let java_text = format!("{}\n{}", String::from_utf8_lossy(&java_output.stdout), String::from_utf8_lossy(&java_output.stderr));
-    let java_major = parse_java_major(&java_text).ok_or_else(|| "Не удалось определить версию Java.".to_string())?;
     let required_java = metadata.get("javaVersion").and_then(|v| v.get("majorVersion")).and_then(|v| v.as_u64()).map(|v| v as u32).unwrap_or_else(|| {
         let parts: Vec<u32> = version_id.split('.').filter_map(|p| p.parse().ok()).collect();
         if parts.first() == Some(&1) && parts.get(1).copied().unwrap_or(0) <= 16 { 8 } else if parts.first() == Some(&1) && parts.get(1) == Some(&17) { 16 } else { 17 }
     });
+    let java = ensure_java_runtime(required_java, &root).await?;
+    let java_major = java_major_at(&java).ok_or_else(|| "Не удалось проверить установленную Java.".to_string())?;
     if java_major < required_java { return Err(format!("Для Minecraft {version_id} нужна Java {required_java} или новее. Найдена Java {java_major}.")); }
     let libraries_root = root.join("libraries");
     let natives_dir = root.join("natives").join(format!("{version_id}-{}", std::process::id()));
@@ -688,23 +830,32 @@ async fn launch_minecraft(version_id: String, auth_state: tauri::State<'_, std::
     let asset_index = metadata.get("assetIndex").and_then(|v| v.get("id")).and_then(|v| v.as_str()).unwrap_or(version_id);
     let mut values = std::collections::HashMap::new();
     values.insert("natives_directory".into(), natives_dir.to_string_lossy().to_string());
-    values.insert("launcher_name".into(), "L.o.S.A.".into()); values.insert("launcher_version".into(), "0.9.1".into());
+    values.insert("launcher_name".into(), "L.o.S.A.".into()); values.insert("launcher_version".into(), "0.9.2".into());
     values.insert("classpath".into(), classpath.join(if cfg!(windows) { ";" } else { ":" }));
     values.insert("classpath_separator".into(), if cfg!(windows) { ";".into() } else { ":".into() });
-    values.insert("auth_player_name".into(), session.profile.name.clone()); values.insert("version_name".into(), version_id.to_string());
+    values.insert("auth_player_name".into(), profile.name.clone()); values.insert("version_name".into(), version_id.to_string());
     values.insert("game_directory".into(), game_dir.to_string_lossy().to_string()); values.insert("assets_root".into(), assets_root.to_string_lossy().to_string());
     values.insert("assets_index_name".into(), asset_index.to_string());
     values.insert("game_assets".into(), assets_root.join("virtual").join(asset_index).to_string_lossy().to_string());
-    values.insert("auth_uuid".into(), session.profile.id.clone());
-    values.insert("auth_access_token".into(), session.access_token.clone()); values.insert("user_type".into(), "msa".into());
+    values.insert("auth_uuid".into(), profile.id.clone());
+    values.insert("auth_access_token".into(), access_token); values.insert("user_type".into(), user_type);
     values.insert("resolution_width".into(), "854".into()); values.insert("resolution_height".into(), "480".into());
     values.insert("quickPlayPath".into(), String::new()); values.insert("quickPlaySingleplayer".into(), String::new());
     values.insert("quickPlayMultiplayer".into(), String::new()); values.insert("quickPlayRealms".into(), String::new());
     values.insert("version_type".into(), metadata.get("type").and_then(|v| v.as_str()).unwrap_or("release").to_string());
     values.insert("user_properties".into(), "{}".into()); values.insert("clientid".into(), String::new()); values.insert("auth_xuid".into(), String::new());
+    // Quick Play не запускается из интерфейса LoSA: соответствующие варианты должны оставаться выключенными.
+    // Метаданные Mojang используют эти feature-флаги, чтобы не передавать несколько вариантов одновременно.
+    let mut features = std::collections::HashMap::new();
+    features.insert("is_demo_user".to_string(), false);
+    features.insert("has_custom_resolution".to_string(), true);
+    features.insert("is_quick_play_singleplayer".to_string(), false);
+    features.insert("is_quick_play_multiplayer".to_string(), false);
+    features.insert("is_quick_play_realms".to_string(), false);
+
     let mut jvm_args = Vec::new(); let mut game_args = Vec::new();
-    append_metadata_arguments(&mut jvm_args, metadata.get("arguments").and_then(|v| v.get("jvm")), &values);
-    append_metadata_arguments(&mut game_args, metadata.get("arguments").and_then(|v| v.get("game")), &values);
+    append_metadata_arguments(&mut jvm_args, metadata.get("arguments").and_then(|v| v.get("jvm")), &values, &features);
+    append_metadata_arguments(&mut game_args, metadata.get("arguments").and_then(|v| v.get("game")), &values, &features);
     if jvm_args.is_empty() {
         let defaults = ["-Xmx2G", "-Djava.library.path=${natives_directory}", "-cp", "${classpath}"];
         jvm_args.extend(defaults.iter().map(|v| expand_game_argument(v, &values)));
@@ -723,6 +874,13 @@ async fn launch_minecraft(version_id: String, auth_state: tauri::State<'_, std::
     command.args(&jvm_args).arg(main_class).args(&game_args).current_dir(&game_dir)
         .stdout(std::process::Stdio::from(log_file))
         .stderr(std::process::Stdio::from(stderr_file));
+    // Do not open a separate black console window for the Java child process on Windows.
+    // Minecraft output is already captured in the launch log above.
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::process::CommandExt;
+        command.creation_flags(0x08000000); // CREATE_NO_WINDOW
+    }
     let child = command.spawn().map_err(|e| format!("Minecraft не удалось запустить через Java: {e}. Журнал: {}", log_path.display()))?;
     Ok(child.id())
 }
@@ -777,6 +935,21 @@ mod launcher_tests {
     use super::*;
 
     #[test]
+    fn offline_uuid_matches_minecraft_name_uuid_format() {
+        assert_eq!(offline_uuid("Notch"), "b50ad385-829d-3141-a216-7e7d7539ba7f");
+    }
+
+    #[test]
+    fn validates_offline_player_names() {
+        assert!(is_valid_offline_name("Steve_123"));
+        assert!(is_valid_offline_name("abc"));
+        assert!(!is_valid_offline_name("ab"));
+        assert!(!is_valid_offline_name("a name"));
+        assert!(!is_valid_offline_name("имя"));
+        assert!(!is_valid_offline_name("this_name_is_way_too_long"));
+    }
+
+    #[test]
     fn parses_java_versions() {
         assert_eq!(parse_java_major("openjdk version \"1.8.0_402\""), Some(8));
         assert_eq!(parse_java_major("openjdk version \"17.0.12\""), Some(17));
@@ -804,6 +977,38 @@ mod launcher_tests {
             expand_game_argument("${version_name}", &values),
             "1.21.4"
         );
+    }
+
+    #[test]
+    fn respects_minecraft_argument_feature_rules() {
+        let metadata: serde_json::Value = serde_json::json!([
+            {
+                "rules": [{"action": "allow", "features": {"is_quick_play_singleplayer": true}}],
+                "value": ["--quickPlaySingleplayer", "world"]
+            },
+            {
+                "rules": [{"action": "allow", "features": {"is_quick_play_multiplayer": true}}],
+                "value": ["--quickPlayMultiplayer", "server.example"]
+            },
+            {
+                "rules": [{"action": "allow", "features": {"has_custom_resolution": true}}],
+                "value": ["--width", "854"]
+            }
+        ]);
+        let mut values = std::collections::HashMap::new();
+        let mut features = std::collections::HashMap::new();
+        features.insert("is_quick_play_singleplayer".to_string(), false);
+        features.insert("is_quick_play_multiplayer".to_string(), false);
+        features.insert("has_custom_resolution".to_string(), true);
+
+        let mut args = Vec::new();
+        append_metadata_arguments(&mut args, Some(&metadata), &values, &features);
+        assert_eq!(args, vec!["--width", "854"]);
+
+        features.insert("is_quick_play_singleplayer".to_string(), true);
+        let mut args_with_quick_play = Vec::new();
+        append_metadata_arguments(&mut args_with_quick_play, Some(&metadata), &values, &features);
+        assert_eq!(args_with_quick_play, vec!["--quickPlaySingleplayer", "world", "--width", "854"]);
     }
 
     #[test]
