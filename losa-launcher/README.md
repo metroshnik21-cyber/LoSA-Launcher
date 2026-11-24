@@ -1,6 +1,6 @@
 # L.o.S.A.
 
-Windows 10/11 desktop launcher prototype, version 0.10.5.
+Windows 10/11 desktop launcher prototype, version 0.10.6.
 
 ## What is included
 - React + TypeScript + Vite desktop UI
@@ -10,7 +10,11 @@ Windows 10/11 desktop launcher prototype, version 0.10.5.
 - Live official Mojang release-version catalog
 - Windows Java runtime detection command
 - Microsoft device-code OAuth flow with Xbox Live, XSTS, Minecraft Services and Java profile lookup
-- Russian-language starter interface for Home, Play, Friends, Mods & Packs, Servers, Settings
+- Russian-language interface with community UI prototypes: Lobby, Servers, Friends, Chat, Store and Settings
+- Server catalog and private-server plan concepts in one Servers section
+- Friends search mockup, store title cosmetics and VIP / VIP+ subscription concepts
+- Language preference selector (translation packs are not yet active)
+- Build creation selectors for edition and loader; Java Edition + Vanilla are currently supported
 
 ## Build locally
 Prerequisites: Node.js 20+, Rust stable, and the Windows build tools required by Tauri 2.
