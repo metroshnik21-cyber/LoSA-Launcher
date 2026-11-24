@@ -9,12 +9,14 @@ on:
       - "feature/v0.9-authentication-foundation"
       - "feature/v0.9.1-install-state"
       - "feature/v0.9.2-offline-profiles"
+      - "feature/launcher-experience-0.10"
   push:
     branches:
       - "feature/v0.8-minecraft-launch"
       - "feature/v0.9-authentication-foundation"
       - "feature/v0.9.1-install-state"
       - "feature/v0.9.2-offline-profiles"
+      - "feature/launcher-experience-0.10"
     tags:
       - "v*"
 
