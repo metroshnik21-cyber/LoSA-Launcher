@@ -40,6 +40,7 @@ const dateLabel = (timestamp?: number | null) => timestamp
 
 export default function App() {
   const [page, setPage] = useState<Page>("Главная");
+  const [appBooting, setAppBooting] = useState(true);
   const [accentColor, setAccentColor] = useState(() => localStorage.getItem("losa.accentColor") ?? "#d8bd64");
   const [offlineName, setOfflineName] = useState(() => localStorage.getItem("losa.offlineName") ?? "");
   const [offlineNameDraft, setOfflineNameDraft] = useState(() => localStorage.getItem("losa.offlineName") ?? "");
@@ -82,7 +83,9 @@ export default function App() {
     finally { setVersionsLoading(false); }
   };
 
-  useEffect(() => { void loadInstances(); void loadVersions(); }, []);
+  useEffect(() => {
+    void Promise.all([loadInstances(), loadVersions()]).finally(() => setAppBooting(false));
+  }, []);
 
   const recentInstances = useMemo(
     () => [...instances].sort((a, b) => (b.lastPlayedAt ?? b.createdAt) - (a.lastPlayedAt ?? a.createdAt)).slice(0, 5),
@@ -209,8 +212,13 @@ export default function App() {
   };
 
   return <div className="app-shell" style={{ "--accent": accentColor } as CSSProperties}>
+    {appBooting && <div className="startup-screen" role="status" aria-label="Загрузка L.o.S.A.">
+      <img className="startup-logo" src="/losa-logo.png" alt="Логотип L.o.S.A." />
+      <div className="startup-progress"><span /></div>
+      <p>Загружаем игровой центр…</p>
+    </div>}
     <aside className="sidebar">
-      <div className="brand"><img src="/losa-logo.png" /><div><b>L.o.S.A.</b><span>LAUNCHER OF SPARK ANVIL</span></div></div>
+      <div className="brand"><img src="/losa-logo.png" /><div><b>L.o.S.A.</b></div></div>
       <div className="profile"><div className="avatar">{(offlineName || "Г").slice(0, 1).toUpperCase()}</div><div className="profile-copy"><b>{offlineName || "Гость"}</b><span>Локальный Offline-профиль</span></div><ChevronDown size={15} /></div>
       <div className="nav-label">БИБЛИОТЕКА</div>
       <nav>{nav.map(({ name, icon: Icon }) => <button key={name} className={page === name ? "nav-item selected" : "nav-item"} onClick={() => setPage(name)}><Icon size={18} /><span>{name}</span></button>)}</nav>
