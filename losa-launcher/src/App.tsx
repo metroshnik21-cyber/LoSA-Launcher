@@ -120,6 +120,8 @@ export default function App() {
     }
     setBusyId(instance.id); setError("");
     try {
+      // Восстановление выполняется автоматически только если проверка обнаружила недостающие файлы.
+      await invoke("prepare_instance", { instanceId: instance.id });
       const pid = await invoke<number>("launch_minecraft", {
         versionId: instance.versionId, instanceId: instance.id, authMode: "offline", offlineName
       });
