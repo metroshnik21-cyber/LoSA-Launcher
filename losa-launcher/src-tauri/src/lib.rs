@@ -560,7 +560,7 @@ async fn install_minecraft_dependencies(version_id: String) -> Result<Dependency
         .map_err(|_| format!("Сначала установи клиент Minecraft {version_id}."))?;
     let metadata: serde_json::Value = serde_json::from_slice(&metadata_bytes)
         .map_err(|e| format!("Не удалось прочитать метаданные версии: {e}"))?;
-    let client = reqwest::Client::builder().user_agent("L.o.S.A. Launcher/0.10.0").build()
+    let client = reqwest::Client::builder().user_agent("L.o.S.A. Launcher/0.10.3").build()
         .map_err(|e| format!("Не удалось подготовить загрузчик: {e}"))?;
     let library_dir = root.join("libraries");
     let assets_dir = root.join("assets");
@@ -1005,7 +1005,7 @@ async fn launch_minecraft(version_id: String, auth_mode: String, offline_name: O
     let asset_index = metadata.get("assetIndex").and_then(|v| v.get("id")).and_then(|v| v.as_str()).unwrap_or(version_id);
     let mut values = std::collections::HashMap::new();
     values.insert("natives_directory".into(), natives_dir.to_string_lossy().to_string());
-    values.insert("launcher_name".into(), "L.o.S.A.".into()); values.insert("launcher_version".into(), "0.10.0".into());
+    values.insert("launcher_name".into(), "L.o.S.A.".into()); values.insert("launcher_version".into(), "0.10.3".into());
     values.insert("classpath".into(), classpath.join(if cfg!(windows) { ";" } else { ":" }));
     values.insert("classpath_separator".into(), if cfg!(windows) { ";".into() } else { ":".into() });
     values.insert("auth_player_name".into(), profile.name.clone()); values.insert("version_name".into(), version_id.to_string());
