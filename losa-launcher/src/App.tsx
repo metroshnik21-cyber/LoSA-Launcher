@@ -182,7 +182,6 @@ type ModrinthHit = { project_id: string; slug: string; title: string; descriptio
 
 function ModsAndPacks() {
   const [section, setSection] = useState<"mods" | "packs">("mods");
-  const [edition, setEdition] = useState<"Java" | "Bedrock">("Java");
   const [query, setQuery] = useState("");
   const [loader, setLoader] = useState("fabric");
   const [gameVersion, setGameVersion] = useState("1.21.4");
@@ -194,7 +193,6 @@ function ModsAndPacks() {
   const [versionLoading, setVersionLoading] = useState(false);
   const [compatibility, setCompatibility] = useState<ReturnType<typeof checkModCompatibility> | null>(null);
   const search = async () => {
-    if (edition === "Bedrock") { setError("Каталог Bedrock-аддонов подключается отдельным источником. Java-моды Modrinth не смешиваются с Bedrock."); return; }
     setLoading(true); setError(""); setSelected(null);
     try {
       const type = section === "packs" ? "modpack" : "mod";
@@ -207,7 +205,7 @@ function ModsAndPacks() {
     } catch (e) { setError(e instanceof Error ? e.message : String(e)); }
     finally { setLoading(false); }
   };
-  useEffect(() => { void search(); }, [section, edition, gameVersion, loader]);
+  useEffect(() => { void search(); }, [section, gameVersion, loader]);
   useEffect(() => {
     if (!selected) { setVersionInfo([]); setCompatibility(null); return; }
     let active = true;
@@ -229,10 +227,10 @@ function ModsAndPacks() {
   return <section className="content mods-content">
     <div className="page-title"><div className="eyebrow"><Layers3 size={13}/> L.o.S.A. MOD CENTER</div><h1>Моды и сборки</h1><p>Ищи отдельные моды и готовые наборы. Для каждого проекта можно проверить версию игры и загрузчик.</p></div>
     <div className="mods-switcher">
-      <button className={section === "mods" ? "active" : ""} onClick={() => { setSection("mods"); setEdition("Java"); }}>Моды</button>
-      <button className={section === "packs" ? "active" : ""} onClick={() => { setSection("packs"); setEdition("Java"); }}>Сборки</button>
+      <button className={section === "mods" ? "active" : ""} onClick={() => setSection("mods")}>Моды</button>
+      <button className={section === "packs" ? "active" : ""} onClick={() => setSection("packs")}>Сборки</button>
     </div>
-    {section !== "bedrock" ? <>
+    <>
       <div className="mods-filters">
         
         <label>Версия Minecraft<select value={gameVersion} onChange={e => setGameVersion(e.target.value)}>{["1.21.11","1.21.10","1.21.9","1.21.8","1.21.7","1.21.6","1.21.5","1.21.4","1.21.3","1.21.1","1.20.6","1.20.4","1.20.1","1.19.4"].map(v => <option key={v}>{v}</option>)}</select></label>
@@ -253,7 +251,7 @@ function ModsAndPacks() {
         <p className="mods-footnote">Пока доступен поиск и просмотр каталога. Установка файла в выбранную сборку и автоматическая проверка зависимостей будут подключены следующим техническим шагом — кнопка установки не имитируется.</p>
       </div>}
       <p className="mods-footnote">Источник каталога: Modrinth API. Загрузка и установка отдельных файлов в папку сборки пока не включены.</p>
-    </> : <BedrockManager />}
+    </>
   </section>;
 }
 
