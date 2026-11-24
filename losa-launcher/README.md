@@ -1,6 +1,6 @@
 # L.o.S.A.
 
-Windows 10/11 desktop launcher prototype, version 0.10.4.
+Windows 10/11 desktop launcher prototype, version 0.10.5.
 
 ## What is included
 - React + TypeScript + Vite desktop UI
@@ -46,3 +46,9 @@ Bedrock Edition is not redistributed by this project; future support should laun
 
 ## Microsoft app registration required
 Create an app registration that supports personal Microsoft accounts and public client flows. Enter its Application (client) ID in Settings. Do not add a client secret to this desktop app. Microsoft/Xbox/Minecraft service access can still be denied if the app registration lacks the required permissions or the account does not own Minecraft Java Edition.
+
+
+## Community interface prototype (0.10.5)
+- Added dedicated screens for the L.o.S.A. lobby, server discovery, chat, cosmetics store, and private-server plans.
+- Search, edition filters, favorites, local chat composition, and private-server draft creation are interactive locally.
+- Sample players, server listings, online counts, store items, and VIP/VIP++ plans are clearly prototype data; networking, purchases, and hosted servers are not connected yet.
