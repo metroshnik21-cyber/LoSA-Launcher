@@ -703,17 +703,39 @@ fn expand_game_argument(raw: &str, values: &std::collections::HashMap<String, St
     for (key, value) in values { result = result.replace(&format!("${{{key}}}"), value); }
     result
 }
-fn append_metadata_arguments(target: &mut Vec<String>, source: Option<&serde_json::Value>, values: &std::collections::HashMap<String, String>) {
+fn argument_rule_matches(rule: &serde_json::Value, features: &std::collections::HashMap<String, bool>) -> bool {
+    let os_matches = rule.get("os").and_then(|v| v.get("name")).and_then(|v| v.as_str())
+        .map(|name| name == "windows").unwrap_or(true);
+    if !os_matches { return false; }
+
+    if let Some(required_features) = rule.get("features").and_then(|v| v.as_object()) {
+        for (name, expected) in required_features {
+            let expected = expected.as_bool().unwrap_or(false);
+            let actual = features.get(name).copied().unwrap_or(false);
+            if actual != expected { return false; }
+        }
+    }
+    true
+}
+
+fn append_metadata_arguments(
+    target: &mut Vec<String>,
+    source: Option<&serde_json::Value>,
+    values: &std::collections::HashMap<String, String>,
+    features: &std::collections::HashMap<String, bool>,
+) {
     let Some(items) = source.and_then(|v| v.as_array()) else { return };
     for item in items {
-        let (allowed, raw_values) = if let Some(text) = item.as_str() { (true, vec![text.to_string()]) }
-        else if let Some(object) = item.as_object() {
+        let (allowed, raw_values) = if let Some(text) = item.as_str() {
+            (true, vec![text.to_string()])
+        } else if let Some(object) = item.as_object() {
             let mut allowed = true;
             if let Some(rules) = object.get("rules").and_then(|v| v.as_array()) {
                 allowed = false;
                 for rule in rules {
-                    let os_ok = rule.get("os").and_then(|v| v.get("name")).and_then(|v| v.as_str()).map(|name| name == "windows").unwrap_or(true);
-                    if os_ok { allowed = rule.get("action").and_then(|v| v.as_str()) == Some("allow"); }
+                    if argument_rule_matches(rule, features) {
+                        allowed = rule.get("action").and_then(|v| v.as_str()) == Some("allow");
+                    }
                 }
             }
             let vals = match object.get("value") {
@@ -722,8 +744,12 @@ fn append_metadata_arguments(target: &mut Vec<String>, source: Option<&serde_jso
                 _ => Vec::new(),
             };
             (allowed, vals)
-        } else { (false, Vec::new()) };
-        if allowed { target.extend(raw_values.iter().map(|v| expand_game_argument(v, values))); }
+        } else {
+            (false, Vec::new())
+        };
+        if allowed {
+            target.extend(raw_values.iter().map(|v| expand_game_argument(v, values)));
+        }
     }
 }
 #[tauri::command]
@@ -818,9 +844,18 @@ async fn launch_minecraft(version_id: String, auth_mode: String, offline_name: O
     values.insert("quickPlayMultiplayer".into(), String::new()); values.insert("quickPlayRealms".into(), String::new());
     values.insert("version_type".into(), metadata.get("type").and_then(|v| v.as_str()).unwrap_or("release").to_string());
     values.insert("user_properties".into(), "{}".into()); values.insert("clientid".into(), String::new()); values.insert("auth_xuid".into(), String::new());
+    // Quick Play не запускается из интерфейса LoSA: соответствующие варианты должны оставаться выключенными.
+    // Метаданные Mojang используют эти feature-флаги, чтобы не передавать несколько вариантов одновременно.
+    let mut features = std::collections::HashMap::new();
+    features.insert("is_demo_user".to_string(), false);
+    features.insert("has_custom_resolution".to_string(), true);
+    features.insert("is_quick_play_singleplayer".to_string(), false);
+    features.insert("is_quick_play_multiplayer".to_string(), false);
+    features.insert("is_quick_play_realms".to_string(), false);
+
     let mut jvm_args = Vec::new(); let mut game_args = Vec::new();
-    append_metadata_arguments(&mut jvm_args, metadata.get("arguments").and_then(|v| v.get("jvm")), &values);
-    append_metadata_arguments(&mut game_args, metadata.get("arguments").and_then(|v| v.get("game")), &values);
+    append_metadata_arguments(&mut jvm_args, metadata.get("arguments").and_then(|v| v.get("jvm")), &values, &features);
+    append_metadata_arguments(&mut game_args, metadata.get("arguments").and_then(|v| v.get("game")), &values, &features);
     if jvm_args.is_empty() {
         let defaults = ["-Xmx2G", "-Djava.library.path=${natives_directory}", "-cp", "${classpath}"];
         jvm_args.extend(defaults.iter().map(|v| expand_game_argument(v, &values)));
@@ -942,6 +977,38 @@ mod launcher_tests {
             expand_game_argument("${version_name}", &values),
             "1.21.4"
         );
+    }
+
+    #[test]
+    fn respects_minecraft_argument_feature_rules() {
+        let metadata: serde_json::Value = serde_json::json!([
+            {
+                "rules": [{"action": "allow", "features": {"is_quick_play_singleplayer": true}}],
+                "value": ["--quickPlaySingleplayer", "world"]
+            },
+            {
+                "rules": [{"action": "allow", "features": {"is_quick_play_multiplayer": true}}],
+                "value": ["--quickPlayMultiplayer", "server.example"]
+            },
+            {
+                "rules": [{"action": "allow", "features": {"has_custom_resolution": true}}],
+                "value": ["--width", "854"]
+            }
+        ]);
+        let mut values = std::collections::HashMap::new();
+        let mut features = std::collections::HashMap::new();
+        features.insert("is_quick_play_singleplayer".to_string(), false);
+        features.insert("is_quick_play_multiplayer".to_string(), false);
+        features.insert("has_custom_resolution".to_string(), true);
+
+        let mut args = Vec::new();
+        append_metadata_arguments(&mut args, Some(&metadata), &values, &features);
+        assert_eq!(args, vec!["--width", "854"]);
+
+        features.insert("is_quick_play_singleplayer".to_string(), true);
+        let mut args_with_quick_play = Vec::new();
+        append_metadata_arguments(&mut args_with_quick_play, Some(&metadata), &values, &features);
+        assert_eq!(args_with_quick_play, vec!["--quickPlaySingleplayer", "world", "--width", "854"]);
     }
 
     #[test]
