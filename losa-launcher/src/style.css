@@ -248,3 +248,40 @@ button:focus-visible{outline:2px solid var(--accent,#d8bd64);outline-offset:3px}
 .friend-result .outline{padding:7px 10px;font-size:9px}
 .language-card{margin-bottom:15px}
 @media(max-width:650px){.build-options-grid{grid-template-columns:1fr}.friend-result{flex-wrap:wrap}}
+
+/* L.o.S.A. 0.10.7 — referral and community role hierarchy */
+.referral-panel{margin-top:15px}
+.referral-top{display:flex;align-items:center;justify-content:space-between;gap:16px}
+.referral-top h2{font-size:19px;margin:8px 0 4px}
+.referral-top p{font-size:10px;color:var(--muted,#899296);margin:0}
+.referral-icon{width:58px;height:58px;display:grid;place-items:center;border-radius:17px;background:color-mix(in srgb,var(--accent,#d8bd64) 15%,transparent);color:var(--accent,#d8bd64)}
+.referral-code{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:13px 15px;margin-top:17px;border:1px dashed var(--accent,#d8bd64);border-radius:9px;background:color-mix(in srgb,var(--accent,#d8bd64) 5%,transparent)}
+.referral-code small,.referral-code b{display:block}
+.referral-code small{font-size:8px;letter-spacing:1px;color:var(--muted,#899296);margin-bottom:5px}
+.referral-code b{font-size:11px}
+.referral-progress{margin-top:19px}
+.referral-progress-head{display:flex;justify-content:space-between;gap:10px;font-size:10px}
+.referral-progress-head strong{color:var(--accent,#d8bd64)}
+.referral-track{height:7px;border-radius:9px;background:var(--line,#303537);overflow:hidden;margin:10px 0}
+.referral-track span{display:block;height:100%;border-radius:9px;background:var(--accent,#d8bd64)}
+.referral-progress>p{font-size:9px;line-height:1.6;color:var(--muted,#899296);margin:0}
+.role-ladder{display:grid;gap:7px;margin-top:20px}
+.role-row{display:flex;align-items:center;gap:11px;padding:11px 12px;border:1px solid var(--line,#303537);border-radius:9px}
+.role-symbol{width:30px;height:30px;display:grid;place-items:center;flex:none;border-radius:9px;background:#85858518;color:var(--muted,#899296)}
+.role-row>div{flex:1;min-width:0}
+.role-row b,.role-row small{display:block}
+.role-row b{font-size:10px}
+.role-row small{font-size:8px;line-height:1.5;color:var(--muted,#899296);margin-top:3px}
+.role-tag{font-size:8px;white-space:nowrap;color:var(--accent,#d8bd64);font-weight:700}
+.role-row.owner{border-color:#b89b49}
+.role-row.owner .role-symbol{color:#b89b49;background:#b89b4918}
+.role-row.deputy{border-color:#8e79c5}
+.role-row.deputy .role-symbol{color:#a58be5;background:#a58be51a}
+.role-row.admin .role-symbol{color:#65a9d7}
+.role-row.moderator .role-symbol{color:#68b88a}
+.referral-safety{display:flex;gap:7px;align-items:flex-start;margin:15px 0 0;font-size:8px;line-height:1.6;color:var(--muted,#899296)}
+.referral-safety svg{flex:none;color:var(--accent,#d8bd64)}
+.theme-light .referral-code{background:#f5f1e4}
+.theme-light .referral-track{background:#dce2e5}
+.theme-light .role-row{background:#fff;border-color:#c5cfd4}
+@media(max-width:620px){.role-row{align-items:flex-start}.role-tag{white-space:normal;text-align:right;max-width:95px}}
