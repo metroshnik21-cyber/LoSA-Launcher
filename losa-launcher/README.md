@@ -1,6 +1,6 @@
 # L.o.S.A.
 
-Windows 10/11 desktop launcher prototype, version 0.10.3.
+Windows 10/11 desktop launcher prototype, version 0.10.4.
 
 ## What is included
 - React + TypeScript + Vite desktop UI
