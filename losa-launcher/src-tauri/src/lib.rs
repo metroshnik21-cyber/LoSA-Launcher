@@ -298,11 +298,25 @@ fn create_instance(name: String, version_id: String, loader: String, icon_data_u
     let mut instances = read_instances(&root)?;
     let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH)
         .unwrap_or_default().as_secs();
-    let id = format!("instance-{now}-{}", instances.len() + 1);
+    let unique = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default().as_nanos();
+    let id = format!("instance-{unique}");
     let instance = LauncherInstance {
         id, name: name.to_string(), version_id: version_id.to_string(), loader,
         icon_data_url, created_at: now, last_played_at: None,
     };
+    // Preserve the previous launcher's shared worlds folder when creating the first real build.
+    if instances.is_empty() {
+        let legacy_game_dir = root.join("game");
+        let instance_game_dir = root.join("instances").join(&instance.id).join("game");
+        if legacy_game_dir.is_dir() && !instance_game_dir.exists() {
+            if let Some(parent) = instance_game_dir.parent() {
+                std::fs::create_dir_all(parent).map_err(|e| format!("Не удалось подготовить папку сборки: {e}"))?;
+            }
+            std::fs::rename(&legacy_game_dir, &instance_game_dir)
+                .map_err(|e| format!("Не удалось перенести существующие миры в новую сборку: {e}"))?;
+        }
+    }
     instances.insert(0, instance.clone());
     write_instances(&root, &instances)?;
     Ok(instance)
@@ -1014,7 +1028,10 @@ async fn launch_minecraft(version_id: String, auth_mode: String, offline_name: O
     }
     let logs_dir = root.join("logs");
     std::fs::create_dir_all(&logs_dir).map_err(|e| format!("Не удалось создать папку журналов: {e}"))?;
-    let log_path = logs_dir.join(format!("minecraft-{version_id}-launch.log"));
+    let log_name = instance_id.as_deref()
+        .map(|id| format!("minecraft-{version_id}-{id}-launch.log"))
+        .unwrap_or_else(|| format!("minecraft-{version_id}-launch.log"));
+    let log_path = logs_dir.join(log_name);
     let log_file = std::fs::File::create(&log_path).map_err(|e| format!("Не удалось создать журнал запуска: {e}"))?;
     let stderr_file = log_file.try_clone().map_err(|e| format!("Не удалось подготовить журнал ошибок: {e}"))?;
     let mut command = std::process::Command::new(&java);
