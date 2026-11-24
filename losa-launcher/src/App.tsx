@@ -141,6 +141,14 @@ function CosmeticWorkshop({ setNotice }: { setNotice: (message: string) => void 
 
 
 type ModrinthHit = { project_id: string; slug: string; title: string; description: string; author: string; downloads: number; icon_url?: string; categories: string[]; versions: string[]; project_type: string };
+type ModrinthVersionInfo = { id: string; name: string; version_number: string; game_versions: string[]; loaders: string[]; date_published: string; dependencies: { project_id?: string | null; version_id?: string | null; dependency_type: "required" | "optional" | "incompatible" | "embedded" }[] };
+function checkModCompatibility(version: ModrinthVersionInfo, gameVersion: string, loader: string, installedProjectIds: string[]) {
+  const gameSupported = version.game_versions.includes(gameVersion);
+  const loaderSupported = loader === "any" || version.loaders.includes(loader);
+  const missingRequired = version.dependencies.filter(d => d.dependency_type === "required" && d.project_id && !installedProjectIds.includes(d.project_id));
+  const conflicts = version.dependencies.filter(d => d.dependency_type === "incompatible" && d.project_id && installedProjectIds.includes(d.project_id));
+  return { compatible: gameSupported && loaderSupported && conflicts.length === 0, gameSupported, loaderSupported, missingRequired, conflicts };
+}
 function ModsAndPacks() {
   const [section, setSection] = useState<"mods" | "packs" | "bedrock">("mods");
   const [edition, setEdition] = useState<"Java" | "Bedrock">("Java");
@@ -151,6 +159,9 @@ function ModsAndPacks() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [selected, setSelected] = useState<ModrinthHit | null>(null);
+  const [versionInfo, setVersionInfo] = useState<ModrinthVersionInfo[]>([]);
+  const [versionLoading, setVersionLoading] = useState(false);
+  const [compatibility, setCompatibility] = useState<ReturnType<typeof checkModCompatibility> | null>(null);
   const search = async () => {
     if (edition === "Bedrock" || section === "bedrock") { setError("Каталог Bedrock-аддонов подключается отдельным источником. Java-моды Modrinth не смешиваются с Bedrock."); return; }
     setLoading(true); setError(""); setSelected(null);
@@ -166,6 +177,23 @@ function ModsAndPacks() {
     finally { setLoading(false); }
   };
   useEffect(() => { void search(); }, [section, edition, gameVersion, loader]);
+  useEffect(() => {
+    if (!selected || section === "bedrock") { setVersionInfo([]); setCompatibility(null); return; }
+    let active = true;
+    setVersionLoading(true);
+    const params = new URLSearchParams({ game_versions: JSON.stringify([gameVersion]), loaders: JSON.stringify(loader === "any" ? [] : [loader]) });
+    fetch("https://api.modrinth.com/v2/project/" + selected.project_id + "/version?" + params.toString(), { headers: { Accept: "application/json" } })
+      .then(response => { if (!response.ok) throw new Error("Не удалось получить версии проекта (" + response.status + ")"); return response.json() as Promise<ModrinthVersionInfo[]>; })
+      .then(versions => {
+        if (!active) return;
+        setVersionInfo(versions);
+        const latest = versions[0];
+        setCompatibility(latest ? checkModCompatibility(latest, gameVersion, loader, []) : null);
+      })
+      .catch(() => { if (active) { setVersionInfo([]); setCompatibility(null); } })
+      .finally(() => { if (active) setVersionLoading(false); });
+    return () => { active = false; };
+  }, [selected, gameVersion, loader, section]);
   const formatDownloads = (value: number) => new Intl.NumberFormat("ru-RU", { notation: "compact" }).format(value);
   return <section className="content mods-content">
     <div className="page-title"><div className="eyebrow"><Layers3 size={13}/> L.o.S.A. MOD CENTER</div><h1>Моды и сборки</h1><p>Ищи отдельные моды и готовые наборы. Совместимость проверяется отдельно до установки.</p></div>
@@ -190,6 +218,7 @@ function ModsAndPacks() {
       {selected && <div className="mod-detail">
         <button className="icon-button" onClick={() => setSelected(null)}><X size={17}/></button><h2>{selected.title}</h2><p>{selected.description}</p>
         <div className="mod-meta"><span>Автор: {selected.author}</span><span>Поддерживаемые версии: {selected.versions.slice(0,8).join(", ")}</span></div>
+        <div className="compatibility-result"><b>Проверка совместимости</b>{versionLoading ? <span>Проверяем версии и загрузчик…</span> : compatibility ? <><span className={compatibility.compatible ? "compat-ok" : "compat-bad"}>{compatibility.compatible ? "Подходит для выбранной версии" : "Есть несовместимость"}</span><small>Игра: {compatibility.gameSupported ? "поддерживается" : "не поддерживается"} · Загрузчик: {compatibility.loaderSupported ? "поддерживается" : "не поддерживается"}</small>{compatibility.missingRequired.length > 0 && <small>Обязательные зависимости для установки: {compatibility.missingRequired.map(d => d.project_id).join(", ")}</small>}{compatibility.conflicts.length > 0 && <small>Конфликтующие проекты: {compatibility.conflicts.map(d => d.project_id).join(", ")}</small>}</> : <span>Нет опубликованной версии для выбранных условий.</span>}</div>
         <a className="outline" href={"https://modrinth.com/" + (section === "packs" ? "modpack/" : "mod/") + selected.slug} target="_blank" rel="noreferrer">Открыть страницу и версии на Modrinth <ArrowUpRight size={14}/></a>
         <p className="mods-footnote">Пока доступен поиск и просмотр каталога. Установка файла в выбранную сборку и автоматическая проверка зависимостей будут подключены следующим техническим шагом — кнопка установки не имитируется.</p>
       </div>}
