@@ -61,13 +61,34 @@ const emptyCosmetic = (): CosmeticDraft => ({
 });
 
 function CosmeticWorkshop({ setNotice }: { setNotice: (message: string) => void }) {
-  const [drafts, setDrafts] = useState<CosmeticDraft[]>(() => {
-    try { return JSON.parse(localStorage.getItem("losa.cosmeticDrafts") ?? "[]") as CosmeticDraft[]; }
-    catch { return []; }
-  });
+  const [drafts, setDrafts] = useState<CosmeticDraft[]>([]);
+  const [draftsLoaded, setDraftsLoaded] = useState(false);
   const [item, setItem] = useState<CosmeticDraft>(() => emptyCosmetic());
   const [saved, setSaved] = useState(false);
-  useEffect(() => { localStorage.setItem("losa.cosmeticDrafts", JSON.stringify(drafts)); }, [drafts]);
+  useEffect(() => {
+    let active = true;
+    const request = indexedDB.open("losa-cosmetic-workshop", 1);
+    request.onupgradeneeded = () => { if (!request.result.objectStoreNames.contains("drafts")) request.result.createObjectStore("drafts"); };
+    request.onsuccess = () => {
+      const db = request.result;
+      const read = db.transaction("drafts", "readonly").objectStore("drafts").get("all");
+      read.onsuccess = () => { if (active) { setDrafts(Array.isArray(read.result) ? read.result as CosmeticDraft[] : []); setDraftsLoaded(true); } db.close(); };
+      read.onerror = () => { if (active) setDraftsLoaded(true); db.close(); };
+    };
+    request.onerror = () => { if (active) { setDraftsLoaded(true); setNotice("Локальное хранилище черновиков недоступно в этом окружении."); } };
+    return () => { active = false; };
+  }, []);
+  useEffect(() => {
+    if (!draftsLoaded) return;
+    const request = indexedDB.open("losa-cosmetic-workshop", 1);
+    request.onsuccess = () => {
+      const db = request.result;
+      const write = db.transaction("drafts", "readwrite").objectStore("drafts").put(drafts, "all");
+      write.onerror = () => setNotice("Не удалось сохранить черновики. Проверь свободное место приложения.");
+      write.onsuccess = () => db.close();
+    };
+    request.onerror = () => setNotice("Не удалось открыть хранилище черновиков.");
+  }, [drafts, draftsLoaded]);
   const update = (patch: Partial<CosmeticDraft>) => { setItem(current => ({ ...current, ...patch, updatedAt: Date.now() })); setSaved(false); };
   const saveDraft = () => {
     if (!item.name.trim()) { setNotice("Укажи название предмета перед сохранением."); return; }
@@ -88,7 +109,7 @@ function CosmeticWorkshop({ setNotice }: { setNotice: (message: string) => void 
   };
   return <section className="content workshop-content">
     <div className="page-title"><div className="eyebrow"><Palette size={13}/> L.o.S.A. CREATOR STUDIO</div><h1>Мастерская косметики</h1><p>Создавай предметы для витрины, настраивай внешний вид и сохраняй собственные черновики.</p></div>
-    <div className="workshop-notice"><ShieldCheck size={16}/><span><b>Локальный режим редактора.</b> Черновики хранятся на этом компьютере. Публикация в общий магазин и проверка прав владельца появятся вместе с серверной системой аккаунтов.</span></div>
+    <div className="workshop-notice"><ShieldCheck size={16}/><span><b>Локальный режим редактора.</b> Черновики хранятся локально в базе данных приложения. Публикация в общий магазин и проверка прав владельца появятся вместе с серверной системой аккаунтов.</span></div>
     <div className="workshop-layout">
       <div className="community-panel workshop-editor">
         <div className="panel-heading"><div><b>{drafts.some(d => d.id === item.id) ? "Редактирование предмета" : "Новый предмет"}</b><small>Основные свойства и внешний вид</small></div><button className="outline" onClick={() => { setItem(emptyCosmetic()); setSaved(false); }}> <Plus size={14}/> Новый</button></div>
