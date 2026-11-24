@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
+import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 
 export type Cosmetic3DChanges = {
   model?: string;
@@ -30,6 +31,8 @@ type Props = {
 
 export function Cosmetic3DEditor(props: Props) {
   const hostRef = useRef<HTMLDivElement>(null);
+  const propsRef = useRef(props);
+  propsRef.current = props;
 
   useEffect(() => {
     const host = hostRef.current;
@@ -165,7 +168,7 @@ export function Cosmetic3DEditor(props: Props) {
       applyTexture(props.textureData, itemGroup);
     }
 
-    const controls = new (awaitOrbitControls())(camera, renderer.domElement);
+    const controls = new OrbitControls(camera, renderer.domElement);
     controls.target.set(0, 0.92, 0);
     controls.enableDamping = true;
     controls.dampingFactor = 0.07;
@@ -181,10 +184,15 @@ export function Cosmetic3DEditor(props: Props) {
     const animate = () => {
       frame = requestAnimationFrame(animate);
       const elapsed = clock.getElapsedTime();
-      itemGroup.position.y = props.positionY + (props.animation === "bob" ? Math.sin(elapsed * 2.3) * 0.08 : 0);
-      itemGroup.rotation.y = THREE.MathUtils.degToRad(props.rotationY) + (props.animation === "spin" ? elapsed * 0.9 : 0);
-      const pulse = props.animation === "pulse" ? 1 + Math.sin(elapsed * 3) * 0.08 : 1;
-      itemGroup.scale.setScalar(props.scale * pulse);
+      const current = propsRef.current;
+      itemGroup.position.set(
+        current.positionX,
+        current.positionY + (current.animation === "bob" ? Math.sin(elapsed * 2.3) * 0.08 : 0),
+        current.positionZ,
+      );
+      itemGroup.rotation.y = THREE.MathUtils.degToRad(current.rotationY) + (current.animation === "spin" ? elapsed * 0.9 : 0);
+      const pulse = current.animation === "pulse" ? 1 + Math.sin(elapsed * 3) * 0.08 : 1;
+      itemGroup.scale.setScalar(current.scale * pulse);
       controls.update();
       renderer.render(scene, camera);
     };
@@ -206,7 +214,7 @@ export function Cosmetic3DEditor(props: Props) {
       renderer.domElement.remove();
       void loadedRoot;
     };
-  }, [props.modelData, props.textureData, props.category, props.positionX, props.positionY, props.positionZ, props.scale, props.rotationY, props.animation]);
+  }, [props.modelData, props.textureData, props.category]);
 
   return (
     <div className="cosmetic-3d-editor">
@@ -251,8 +259,3 @@ function applyTexture(dataUrl: string, root: THREE.Object3D) {
   });
 }
 
-// Kept behind a tiny factory so the component only imports the controls code when Three.js is initialized.
-function awaitOrbitControls() {
-  return OrbitControls;
-}
-import { OrbitControls } from "three/addons/controls/OrbitControls.js";
