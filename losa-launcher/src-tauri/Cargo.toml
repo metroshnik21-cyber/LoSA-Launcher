@@ -1,6 +1,6 @@
 [package]
 name = "losa-launcher"
-version = "0.10.3"
+version = "0.10.4"
 description = "L.o.S.A. launcher"
 authors = ["Spark_Anvil"]
 edition = "2021"

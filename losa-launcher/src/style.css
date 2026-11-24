@@ -181,3 +181,30 @@ button:focus-visible{outline:2px solid var(--accent,#d8bd64);outline-offset:3px}
 .theme-light .startup-screen p{color:#667176}
 .theme-light .startup-progress{background:#d9dfe2}
 @media(prefers-reduced-motion:reduce){.profile-menu{animation:none}}
+
+
+/* L.o.S.A. 0.10.4 — preset accents and stronger light-theme contrast */
+.accent-presets{display:flex;align-items:center;gap:9px;flex-wrap:wrap}
+.accent-swatch{width:30px;height:30px;flex:none;padding:0;border:2px solid #ffffff40;border-radius:50%;background:var(--swatch);cursor:pointer;box-shadow:0 1px 4px #0003;transition:transform 180ms cubic-bezier(.2,.72,.18,1),box-shadow 180ms ease,border-color 180ms ease}
+.accent-swatch:hover{transform:scale(1.13);box-shadow:0 3px 10px #0004}
+.accent-swatch.selected{border-color:var(--swatch);box-shadow:0 0 0 2px var(--accent),0 0 0 4px color-mix(in srgb,var(--accent) 24%,transparent)}
+.theme-light{background:#edf0f2!important}
+.theme-light .sidebar{background:#e1e6e9;border-color:#c1cbd0}
+.theme-light .brand span,.theme-light .profile-copy span,.theme-light .nav-label,.theme-light .sidebar-bottom,.theme-light .topbar,.theme-light .crumb,.theme-light .build-last-played,.theme-light .muted,.theme-light .page-title p,.theme-light .section-head p,.theme-light .detail-grid small,.theme-light .settings-heading small,.theme-light .quick-card span,.theme-light footer{color:#4f5d64!important}
+.theme-light .profile,.theme-light .quick-card,.theme-light .settings-card,.theme-light .build-card,.theme-light .instance-card,.theme-light .runtime-panel{border-color:#b9c4ca}
+.theme-light .topbar,.theme-light footer,.theme-light .settings-heading{border-color:#c2ccd1}
+.theme-light .nav-item{color:#46545b}
+.theme-light .nav-item:hover{background:#d5dde1;color:#1d292e}
+.theme-light .nav-item.selected{background:#d1dbe0;box-shadow:inset 3px 0 var(--accent,#b79a43)}
+.theme-light .hero{border-color:#bec9ce;background:linear-gradient(110deg,#fff,#e9eef0 65%,#f1ecdf)}
+.theme-light .build-card-top:hover{background:#e7edef}
+.theme-light .build-details{background:#f3f6f7;border-color:#c5cfd4}
+.theme-light .wide-input,.theme-light .instance-controls select,.theme-light .create-row input,.theme-light .edit-build input:not([type=file]){border-color:#aab6bc}
+.theme-light .outline{border-color:#7f8d94;color:#29383f}
+.theme-light .outline:hover{background:#e1e8eb;border-color:#596970}
+.theme-light .theme-option{border-color:#9eabb2;color:#2e3c43}
+.theme-light .avatar-option{border-color:#b6c1c7}
+.theme-light .settings-card{box-shadow:0 2px 9px #26343a12}
+.theme-light .accent-swatch{border-color:#ffffffd9}
+.theme-light .accent-swatch.selected{border-color:var(--swatch);box-shadow:0 0 0 2px var(--accent),0 0 0 4px color-mix(in srgb,var(--accent) 25%,transparent)}
+@media(max-width:600px){.accent-controls{align-items:flex-start}.accent-presets{max-width:240px}}
