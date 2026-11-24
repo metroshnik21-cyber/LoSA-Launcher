@@ -172,7 +172,7 @@ export default function App() {
         </button>
         <ChevronDown size={17} className={expanded ? "build-chevron open" : "build-chevron"} />
       </div>
-      <div className={expanded ? "build-details expanded" : "build-details"} aria-hidden={!expanded} inert={!expanded}>
+      <div className={expanded ? "build-details expanded" : "build-details"} aria-hidden={!expanded}>
         {editingId === instance.id ? <div className="edit-build">
           <label>Название сборки<input value={editName} maxLength={40} onChange={e => setEditName(e.target.value)} /></label>
           <label className="field-label">Логотип сборки</label><IconPicker selected={editIconIndex} onSelect={index => { setEditIconIndex(index); setEditIcon(null); }} />
