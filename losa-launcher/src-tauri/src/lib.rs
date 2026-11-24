@@ -1023,8 +1023,18 @@ async fn launch_minecraft(version_id: String, auth_mode: String, offline_name: O
         use std::os::windows::process::CommandExt;
         command.creation_flags(0x08000000); // CREATE_NO_WINDOW
     }
-    let child = command.spawn().map_err(|e| format!("Minecraft не удалось запустить через Java: {e}. Журнал: {}", log_path.display()))?;
+    let mut child = command.spawn().map_err(|e| format!("Minecraft не удалось запустить через Java: {e}. Журнал: {}", log_path.display()))?;
     let pid = child.id();
+    // Не сообщаем об успешном запуске, пока не убедились, что Java не завершилась мгновенно.
+    tokio::time::sleep(Duration::from_secs(2)).await;
+    if let Some(status) = child.try_wait().map_err(|e| format!("Не удалось проверить процесс Minecraft: {e}. Журнал: {}", log_path.display()))? {
+        let log_tail = std::fs::read_to_string(&log_path).unwrap_or_default()
+            .lines().rev().take(24).collect::<Vec<_>>().into_iter().rev().collect::<Vec<_>>().join("\n");
+        return Err(format!(
+            "Minecraft завершился во время запуска (код: {}). Журнал: {}\nПоследние строки:\n{}",
+            status, log_path.display(), if log_tail.is_empty() { "Журнал пуст.".to_string() } else { log_tail }
+        ));
+    }
     if let Some(id) = instance_id.as_deref() {
         if let Ok(mut instances) = read_instances(&root) {
             if let Some(instance) = instances.iter_mut().find(|item| item.id == id) {
