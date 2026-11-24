@@ -348,8 +348,13 @@ async fn prepare_instance(instance_id: String) -> Result<MinecraftInstallationSt
     let root = launcher_root()?;
     let instance = read_instances(&root)?.into_iter().find(|item| item.id == instance_id)
         .ok_or_else(|| "Сборка не найдена.".to_string())?;
-    install_vanilla_client(instance.version_id.clone()).await?;
-    install_minecraft_dependencies(instance.version_id.clone()).await?;
+    let current_status = get_minecraft_installation_status(instance.version_id.clone())?;
+    if current_status.installed_client.is_none() {
+        install_vanilla_client(instance.version_id.clone()).await?;
+    }
+    if current_status.dependency_report.is_none() {
+        install_minecraft_dependencies(instance.version_id.clone()).await?;
+    }
     let metadata_path = root.join("versions").join(&instance.version_id).join(format!("{}.json", instance.version_id));
     let metadata_bytes = std::fs::read(&metadata_path).map_err(|e| format!("Не удалось проверить метаданные версии: {e}"))?;
     let metadata: serde_json::Value = serde_json::from_slice(&metadata_bytes).map_err(|e| format!("Метаданные Minecraft повреждены: {e}"))?;
