@@ -442,3 +442,34 @@ button:focus-visible{outline:2px solid var(--accent,#d8bd64);outline-offset:3px}
 .compatibility-result b{font-size:10px}.compatibility-result span,.compatibility-result small{font-size:9px;color:var(--muted,#899296);line-height:1.5}
 .compatibility-result .compat-ok{color:#82bd8a}.compatibility-result .compat-bad{color:#e39b8e}
 .theme-light .compatibility-result{background:#f4f7f5;border-color:#c5cfd4}
+
+
+/* L.o.S.A. 0.10.9 — interactive 3D cosmetics workshop */
+.cosmetic-3d-editor{display:grid;gap:14px;margin:18px 0;padding:14px;border:1px solid var(--line,#343b3e);border-radius:11px;background:color-mix(in srgb,var(--accent,#d8bd64) 3%,var(--panel,#191c1e))}
+.cosmetic-3d-viewer{position:relative;overflow:hidden;border:1px solid var(--line,#343b3e);border-radius:9px;background:radial-gradient(ellipse at 50% 35%,#34434d,#171d22 75%);min-height:340px}
+.cosmetic-3d-host{height:340px;width:100%;touch-action:none}
+.cosmetic-3d-canvas{display:block;width:100%;height:100%;outline:0}
+.cosmetic-3d-label{position:absolute;z-index:1;top:12px;left:13px;color:#d6e0e7;font-size:8px;letter-spacing:1px;pointer-events:none}
+.cosmetic-3d-fallback{display:grid;place-items:center;min-height:340px;padding:24px;color:#e7c77a;text-align:center;font-size:11px;line-height:1.6}
+.cosmetic-3d-tools{display:grid;gap:13px}
+.cosmetic-3d-tools-head{display:flex;align-items:baseline;justify-content:space-between;gap:10px}
+.cosmetic-3d-tools-head b{font-size:11px;color:var(--text,#eceef0)}
+.cosmetic-3d-tools-head small{font-size:8px;color:var(--muted,#899296)}
+.cosmetic-3d-upload-row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.cosmetic-3d-upload-row .workshop-upload{min-height:64px;display:grid;gap:5px;text-align:center}
+.cosmetic-3d-upload-row .workshop-upload small{font-size:8px}
+.cosmetic-3d-upload-row .workshop-upload input{display:block;max-width:100%;width:100%;font-size:8px;color:var(--muted,#899296)}
+.cosmetic-3d-file-actions{display:flex;gap:14px}
+.cosmetic-3d-sliders{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.cosmetic-3d-sliders label{display:grid;grid-template-columns:1fr auto;align-items:center;gap:7px;color:var(--muted,#899296);font-size:9px}
+.cosmetic-3d-sliders input{grid-column:1/-1;width:100%;accent-color:var(--accent,#d8bd64)}
+.cosmetic-3d-sliders output{font-variant-numeric:tabular-nums;color:var(--text,#eceef0)}
+.cosmetic-3d-animation{display:grid;gap:7px;color:var(--muted,#899296);font-size:9px;font-weight:700}
+.cosmetic-3d-animation select{width:100%;padding:9px 10px;border:1px solid var(--line,#343b3e);border-radius:8px;background:var(--panel,#191c1e);color:var(--text,#eceef0);font:inherit}
+.theme-light .cosmetic-3d-editor{background:#f3f6f7;border-color:#c5cfd4}
+.theme-light .cosmetic-3d-tools-head b{color:#26353b}
+.theme-light .cosmetic-3d-animation select{background:#fff;color:#26353b;border-color:#c5cfd4}
+@media(max-width:600px){.cosmetic-3d-upload-row,.cosmetic-3d-sliders{grid-template-columns:1fr}.cosmetic-3d-viewer,.cosmetic-3d-host{min-height:280px;height:280px}}
+
+/* Temporarily hide the cosmetic workshop entry; keep its implementation for a later release. */
+.sidebar nav .nav-item:has(svg.lucide-palette){display:none}

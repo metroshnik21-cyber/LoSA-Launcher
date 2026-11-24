@@ -3,6 +3,7 @@ import { Home, Gamepad2, Users, Layers3, Server, Settings, Plus, Play, ChevronDo
 import { getMinecraftVersions, type MinecraftVersion } from "./lib/minecraft";
 import { invoke } from "@tauri-apps/api/core";
 import { checkModCompatibility, type ModrinthVersionInfo } from "./lib/mod-compatibility";
+import { Cosmetic3DEditor } from "./components/Cosmetic3DEditor";
 
 type Page = "Главная" | "Играть" | "Лобби" | "Друзья" | "Чат" | "Магазин" | "Мастерская" | "Моды и сборки" | "Серверы" | "Настройки";
 type LauncherInstance = {
@@ -54,11 +55,14 @@ const dateLabel = (timestamp?: number | null) => timestamp
 type CosmeticDraft = {
   id: string; name: string; description: string; category: string; rarity: string;
   price: string; glyph: string; image: string; updatedAt: number;
+  model?: string; texture?: string; positionX?: number; positionY?: number; positionZ?: number;
+  scale?: number; rotationY?: number; animation?: string;
 };
 const cosmeticCategories = ["Головные уборы", "Питомцы", "Эмоции", "Плащи", "Ауры", "Рамки", "Титулы"];
 const emptyCosmetic = (): CosmeticDraft => ({
   id: crypto.randomUUID(), name: "", description: "", category: "Головные уборы",
-  rarity: "Обычная", price: "Бесплатно", glyph: "✦", image: "", updatedAt: Date.now()
+  rarity: "Обычная", price: "Бесплатно", glyph: "✦", image: "", updatedAt: Date.now(),
+  model: "", texture: "", positionX: 0, positionY: 0, positionZ: 0, scale: 1, rotationY: 0, animation: "none"
 });
 
 function CosmeticWorkshop({ setNotice }: { setNotice: (message: string) => void }) {
@@ -108,6 +112,24 @@ function CosmeticWorkshop({ setNotice }: { setNotice: (message: string) => void 
     reader.onerror = () => setNotice("Не удалось прочитать изображение.");
     reader.readAsDataURL(file);
   };
+  const readModel = (file?: File) => {
+    if (!file) return;
+    if (!file.name.toLowerCase().endsWith(".glb")) { setNotice("Пока поддерживается единый 3D-файл GLB. Формат GLTF с внешними файлами добавим отдельно."); return; }
+    if (file.size > 8 * 1024 * 1024) { setNotice("3D-модель слишком большая. Максимальный размер — 8 МБ."); return; }
+    const reader = new FileReader();
+    reader.onload = () => { if (typeof reader.result === "string") update({ model: reader.result }); };
+    reader.onerror = () => setNotice("Не удалось прочитать 3D-модель.");
+    reader.readAsDataURL(file);
+  };
+  const readTexture = (file?: File) => {
+    if (!file) return;
+    if (!["image/png", "image/jpeg", "image/webp"].includes(file.type)) { setNotice("Текстура должна быть в формате PNG, JPG или WEBP."); return; }
+    if (file.size > 4 * 1024 * 1024) { setNotice("Текстура слишком большая. Максимальный размер — 4 МБ."); return; }
+    const reader = new FileReader();
+    reader.onload = () => { if (typeof reader.result === "string") update({ texture: reader.result }); };
+    reader.onerror = () => setNotice("Не удалось прочитать текстуру.");
+    reader.readAsDataURL(file);
+  };
   return <section className="content workshop-content">
     <div className="page-title"><div className="eyebrow"><Palette size={13}/> L.o.S.A. CREATOR STUDIO</div><h1>Мастерская косметики</h1><p>Создавай предметы для витрины, настраивай внешний вид и сохраняй собственные черновики.</p></div>
     <div className="workshop-notice"><ShieldCheck size={16}/><span><b>Локальный режим редактора.</b> Черновики хранятся локально в базе данных приложения. Публикация в общий магазин и проверка прав владельца появятся вместе с серверной системой аккаунтов.</span></div>
@@ -125,6 +147,20 @@ function CosmeticWorkshop({ setNotice }: { setNotice: (message: string) => void 
           <label className="workshop-field">Символ предпросмотра<input value={item.glyph} maxLength={4} onChange={e => update({ glyph: e.target.value })} placeholder="✦"/></label>
         </div>
         <div className="workshop-field"><span className="workshop-label">Изображение предмета</span><label className="workshop-upload"><ImagePlus size={18}/><span>{item.image ? "Заменить изображение" : "Загрузить изображение"}</span><small>PNG, JPG, WEBP · до 5 МБ</small><input type="file" accept="image/png,image/jpeg,image/webp,image/gif" onChange={e => readImage(e.target.files?.[0])}/></label>{item.image && <button className="text-action" onClick={() => update({ image: "" })}>Удалить изображение</button>}</div>
+        <Cosmetic3DEditor
+          modelData={item.model || ""}
+          textureData={item.texture || ""}
+          category={item.category}
+          positionX={item.positionX ?? 0}
+          positionY={item.positionY ?? 0}
+          positionZ={item.positionZ ?? 0}
+          scale={item.scale ?? 1}
+          rotationY={item.rotationY ?? 0}
+          animation={item.animation || "none"}
+          onChange={update}
+          onModelFile={readModel}
+          onTextureFile={readTexture}
+        />
         <div className="workshop-actions"><button className="primary" onClick={saveDraft}><Save size={14}/> Сохранить черновик</button><button className="outline" onClick={() => { setItem(emptyCosmetic()); setSaved(false); }}>Сбросить</button></div>
       </div>
       <div className="community-panel workshop-preview-panel">
