@@ -1,6 +1,6 @@
-# L.o.S.A. — Launcher of Spark Anvil
+# L.o.S.A.
 
-Windows 10/11 desktop launcher prototype, version 0.4.0.
+Windows 10/11 desktop launcher prototype, version 0.10.3.
 
 ## What is included
 - React + TypeScript + Vite desktop UI
@@ -41,8 +41,7 @@ This milestone adds the Microsoft device-code login flow and Minecraft Java prof
 Bedrock Edition is not redistributed by this project; future support should launch a legally installed copy from Microsoft Store/Xbox. Cross-play between Java and Bedrock requires a compatible server-side bridge (for example, Geyser), not just a launcher.
 
 ## Project identity
-**L.o.S.A. — Launcher of Spark Anvil**  
-Creator: **Spark_Anvil**
+**L.o.S.A.**
 
 
 ## Microsoft app registration required
