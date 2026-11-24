@@ -437,3 +437,8 @@ button:focus-visible{outline:2px solid var(--accent,#d8bd64);outline-offset:3px}
 .theme-light .mods-filters select,.theme-light .mods-search,.theme-light .mod-card,.theme-light .mod-detail,.theme-light .bedrock-grid article{background:#fff;border-color:#c5cfd4;color:#26353b}
 .theme-light .mods-search input{color:#26353b}
 @media(max-width:760px){.mods-grid,.bedrock-grid{grid-template-columns:1fr}.mods-filters{display:grid;grid-template-columns:1fr 1fr}.mods-search .primary{padding:9px}.bedrock-banner{align-items:flex-start}}
+
+.compatibility-result{display:grid;gap:6px;margin:13px 0;padding:12px;border:1px solid var(--line,#394144);border-radius:8px;background:color-mix(in srgb,var(--accent,#d8bd64) 7%,transparent)}
+.compatibility-result b{font-size:10px}.compatibility-result span,.compatibility-result small{font-size:9px;color:var(--muted,#899296);line-height:1.5}
+.compatibility-result .compat-ok{color:#82bd8a}.compatibility-result .compat-bad{color:#e39b8e}
+.theme-light .compatibility-result{background:#f4f7f5;border-color:#c5cfd4}
