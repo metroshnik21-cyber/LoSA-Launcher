@@ -129,12 +129,23 @@ export default function App() {
     }
     setBusyId(instance.id); setError("");
     try {
-      // Восстановление выполняется автоматически только если проверка обнаружила недостающие файлы.
-      await invoke("prepare_instance", { instanceId: instance.id });
-      const pid = await invoke<number>("launch_minecraft", {
+      const launch = () => invoke<number>("launch_minecraft", {
         versionId: instance.versionId, instanceId: instance.id, authMode: "offline", offlineName
       });
-      setNotice("Minecraft запускается. PID процесса: " + pid);
+      let pid: number;
+      try {
+        // Обычный запуск не должен повторно сканировать и проверять все установленные файлы.
+        // launch_minecraft сам проверяет Java и наличие обязательных компонентов.
+        pid = await launch();
+      } catch (firstError) {
+        const message = asMessage(firstError);
+        const recoverable = /не найдена библиотека|не найден native-файл|клиентский JAR|клиент Minecraft .* не установлен|сначала установи клиент/i.test(message);
+        if (!recoverable) throw firstError;
+        setNotice("Обнаружены недостающие файлы. Восстанавливаем сборку…");
+        await invoke("prepare_instance", { instanceId: instance.id });
+        pid = await launch();
+      }
+      setNotice("Minecraft запускается — загрузка игрового меню может занять некоторое время. PID: " + pid);
       await loadInstances();
     } catch (e) { setError(asMessage(e)); }
     finally { setBusyId(null); }
@@ -165,7 +176,7 @@ export default function App() {
     } catch (e) { setError(asMessage(e)); }
   };
 
-  const IconPicker = ({ selected, onSelect }: { selected: number | null; onSelect: (index: number) => void }) => <div className="avatar-picker" role="group" aria-label="Варианты логотипа сборки">{avatarPalettes.map((_, index) => <button type="button" key={index} className={selected === index ? "avatar-option selected" : "avatar-option"} onClick={() => onSelect(index)} aria-label={"Логотип " + (index + 1)} title={"Вариант " + (index + 1)}><img src={avatarData(index)} alt="" /></button>)}</div>;
+  const IconPicker = ({ selected, onSelect }: { selected: number | null; onSelect: (index: number) => void }) => <div className="avatar-picker" role="group" aria-label="Варианты логотипа сборки">{logoGlyphs.map((_, index) => <button type="button" key={index} className={selected === index ? "avatar-option selected" : "avatar-option"} onClick={() => onSelect(index)} aria-label={"Логотип " + (index + 1)} title={"Вариант " + (index + 1)}><img src={avatarData(index)} alt="" /></button>)}</div>;
 
   const BuildCard = ({ instance }: { instance: LauncherInstance }) => {
     const expanded = expandedId === instance.id;
