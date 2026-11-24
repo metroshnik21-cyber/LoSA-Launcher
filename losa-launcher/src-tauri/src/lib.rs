@@ -560,7 +560,7 @@ async fn install_minecraft_dependencies(version_id: String) -> Result<Dependency
         .map_err(|_| format!("Сначала установи клиент Minecraft {version_id}."))?;
     let metadata: serde_json::Value = serde_json::from_slice(&metadata_bytes)
         .map_err(|e| format!("Не удалось прочитать метаданные версии: {e}"))?;
-    let client = reqwest::Client::builder().user_agent("L.o.S.A. Launcher/0.10.0").build()
+    let client = reqwest::Client::builder().user_agent("L.o.S.A. Launcher/0.10.3").build()
         .map_err(|e| format!("Не удалось подготовить загрузчик: {e}"))?;
     let library_dir = root.join("libraries");
     let assets_dir = root.join("assets");
@@ -759,8 +759,19 @@ fn library_rule_allows(library: &serde_json::Value) -> bool {
     allowed
 }
 
+#[cfg(target_os = "windows")]
+fn suppress_console_window(command: &mut std::process::Command) {
+    use std::os::windows::process::CommandExt;
+    command.creation_flags(0x08000000); // CREATE_NO_WINDOW
+}
+
+#[cfg(not(target_os = "windows"))]
+fn suppress_console_window(_command: &mut std::process::Command) {}
+
 fn java_major_at(path: &std::path::Path) -> Option<u32> {
-    let output = std::process::Command::new(path).arg("-version").output().ok()?;
+    let mut command = std::process::Command::new(path);
+    suppress_console_window(&mut command);
+    let output = command.arg("-version").output().ok()?;
     let text = format!("{}\n{}", String::from_utf8_lossy(&output.stdout), String::from_utf8_lossy(&output.stderr));
     parse_java_major(&text)
 }
@@ -780,9 +791,12 @@ fn find_java_executable(directory: &std::path::Path) -> Option<std::path::PathBu
 
 async fn ensure_java_runtime(required_major: u32, root: &std::path::Path) -> Result<std::path::PathBuf, String> {
     #[cfg(target_os = "windows")]
-    let lookup = std::process::Command::new("where.exe").arg("java.exe").output();
+    let mut command = std::process::Command::new("where.exe");
+    suppress_console_window(&mut command);
+    let lookup = command.arg("java.exe").output();
     #[cfg(not(target_os = "windows"))]
-    let lookup = std::process::Command::new("which").arg("java").output();
+    let mut command = std::process::Command::new("which");
+    let lookup = command.arg("java").output();
 
     if let Some(system_java) = lookup.ok().filter(|o| o.status.success())
         .and_then(|o| String::from_utf8_lossy(&o.stdout).lines().next().map(str::trim).filter(|s| !s.is_empty()).map(std::path::PathBuf::from)) {
@@ -991,7 +1005,7 @@ async fn launch_minecraft(version_id: String, auth_mode: String, offline_name: O
     let asset_index = metadata.get("assetIndex").and_then(|v| v.get("id")).and_then(|v| v.as_str()).unwrap_or(version_id);
     let mut values = std::collections::HashMap::new();
     values.insert("natives_directory".into(), natives_dir.to_string_lossy().to_string());
-    values.insert("launcher_name".into(), "L.o.S.A.".into()); values.insert("launcher_version".into(), "0.10.0".into());
+    values.insert("launcher_name".into(), "L.o.S.A.".into()); values.insert("launcher_version".into(), "0.10.3".into());
     values.insert("classpath".into(), classpath.join(if cfg!(windows) { ";" } else { ":" }));
     values.insert("classpath_separator".into(), if cfg!(windows) { ";".into() } else { ":".into() });
     values.insert("auth_player_name".into(), profile.name.clone()); values.insert("version_name".into(), version_id.to_string());
@@ -1078,7 +1092,11 @@ fn parse_java_major(output: &str) -> Option<u32> {
 #[tauri::command]
 fn detect_java() -> String {
     #[cfg(target_os = "windows")]
-    let lookup = std::process::Command::new("where.exe").arg("java.exe").output();
+    let lookup = {
+        let mut command = std::process::Command::new("where.exe");
+        suppress_console_window(&mut command);
+        command.arg("java.exe").output()
+    };
     #[cfg(not(target_os = "windows"))]
     let lookup = std::process::Command::new("which").arg("java").output();
 
@@ -1090,7 +1108,9 @@ fn detect_java() -> String {
     let Some(executable) = executable else {
         return "Java не найдена в PATH. Следующим шагом добавим установку подходящей Java прямо из L.o.S.A.".into();
     };
-    let output = match std::process::Command::new(&executable).arg("-version").output() {
+    let mut command = std::process::Command::new(&executable);
+    suppress_console_window(&mut command);
+    let output = match command.arg("-version").output() {
         Ok(output) => output,
         Err(error) => return format!("Java найдена по пути {executable}, но не запускается: {error}"),
     };

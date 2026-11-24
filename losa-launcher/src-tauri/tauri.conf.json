@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "L.o.S.A. - Launcher of Spark Anvil",
-  "version": "0.10.1",
+  "productName": "L.o.S.A.",
+  "version": "0.10.3",
   "identifier": "com.losa.launcher",
   "build": {
     "beforeDevCommand": "npm run dev",
@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "L.o.S.A. — Launcher of Spark Anvil",
+        "title": "L.o.S.A.",
         "width": 1180,
         "height": 760,
         "minWidth": 760,
@@ -27,8 +27,20 @@
   },
   "bundle": {
     "active": true,
-    "targets": ["nsis"],
-    "icon": ["icons/32x32.png", "icons/128x128.png", "icons/icon.png", "icons/icon.ico"],
-    "windows": {"nsis":{"displayLanguageSelector":false,"installMode":"currentUser"}}
+    "targets": [
+      "nsis"
+    ],
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/icon.png",
+      "icons/icon.ico"
+    ],
+    "windows": {
+      "nsis": {
+        "displayLanguageSelector": false,
+        "installMode": "currentUser"
+      }
+    }
   }
 }
