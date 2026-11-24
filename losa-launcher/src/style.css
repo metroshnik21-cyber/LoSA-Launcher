@@ -107,3 +107,77 @@ button:focus-visible{outline:2px solid var(--accent,#d8bd64);outline-offset:3px}
 .build-preparation.preparing{color:#d8bd64!important}
 .build-preparation.error{color:#e58b83!important}
 .startup-screen p{max-width:min(420px,80vw);text-align:center;min-height:16px}
+
+
+/* L.o.S.A. 0.10.3 — working profile menu, theme switch and refined controls */
+.profile-wrap{position:relative;margin-bottom:28px}
+.profile-wrap .profile{width:100%;margin:0;text-align:left;color:inherit;font:inherit;cursor:pointer}
+.profile-chevron{flex:none;transition:transform 220ms cubic-bezier(.2,.72,.18,1)}
+.profile-chevron.open{transform:rotate(180deg)}
+.profile-menu{position:absolute;z-index:30;left:0;right:0;top:calc(100% + 7px);padding:7px;background:#202426;border:1px solid #3a4143;border-radius:10px;box-shadow:0 14px 34px #0008;animation:profile-menu-in 180ms cubic-bezier(.2,.72,.18,1) both}
+.profile-menu-heading{padding:8px 9px 10px;border-bottom:1px solid #363c3e;margin-bottom:5px}
+.profile-menu-heading b,.profile-menu-heading span{display:block}
+.profile-menu-heading b{font-size:11px;color:#eef0f0}
+.profile-menu-heading span{font-size:9px;color:#929a9d;margin-top:4px}
+.profile-menu>button{width:100%;border:0;background:transparent;color:#dce0e0;text-align:left;padding:9px;border-radius:6px;font:500 10px Inter;cursor:pointer}
+.profile-menu>button:hover{background:#303638;color:#fff}
+@keyframes profile-menu-in{from{opacity:0;transform:translateY(-5px)}to{opacity:1;transform:translateY(0)}}
+.theme-options{display:flex;gap:8px;margin:0 0 4px}
+.theme-option{min-width:110px;border:1px solid #414749;border-radius:7px;background:#24292b;color:#cbd0d1;padding:10px 14px;font:600 10px Inter;cursor:pointer}
+.theme-option.active{border-color:var(--accent,#d8bd64);background:#353124;color:#f0df9e;box-shadow:0 0 0 2px color-mix(in srgb,var(--accent,#d8bd64) 18%,transparent)}
+.accent-input{width:38px;height:38px;flex:none;padding:4px;border:1px solid #bfc5c8;border-radius:50%;background:#e4e7e9;box-shadow:0 1px 3px #0002;cursor:pointer;overflow:hidden}
+.accent-input::-webkit-color-swatch-wrapper{padding:4px}
+.accent-input::-webkit-color-swatch{border:1px solid #aeb5b9;border-radius:50%}
+.accent-input::-moz-color-swatch{border:1px solid #aeb5b9;border-radius:50%}
+/* Use a height transition as a fallback for engines that do not interpolate grid tracks reliably. */
+.build-details{max-height:0;grid-template-rows:minmax(0,0fr);transition:max-height 360ms cubic-bezier(.2,.72,.18,1),grid-template-rows 360ms cubic-bezier(.2,.72,.18,1),padding 360ms cubic-bezier(.2,.72,.18,1),opacity 280ms ease,transform 360ms cubic-bezier(.2,.72,.18,1),border-width 360ms ease}
+.build-details.expanded{max-height:900px;grid-template-rows:minmax(0,1fr)}
+.theme-light{background:#f2f4f5!important;color:#202528!important;color-scheme:light}
+.theme-light .sidebar{background:#e8ebed;border-color:#d2d8db}
+.theme-light .brand b,.theme-light .profile-copy b,.theme-light .nav-item.selected,.theme-light .section-head h2,.theme-light .build-summary b,.theme-light .detail-grid b,.theme-light .settings-heading b,.theme-light .quick-card b,.theme-light .empty-page h1,.theme-light .page-title h1{color:#202528!important}
+.theme-light .brand span,.theme-light .profile-copy span,.theme-light .nav-label,.theme-light .sidebar-bottom,.theme-light .topbar,.theme-light .crumb,.theme-light .build-last-played,.theme-light .muted,.theme-light .page-title p,.theme-light .section-head p,.theme-light .detail-grid small,.theme-light .settings-heading small,.theme-light .quick-card span,.theme-light footer{color:#667176!important}
+.theme-light .profile,.theme-light .quick-card,.theme-light .settings-card,.theme-light .build-card,.theme-light .instance-card,.theme-light .runtime-panel{background:#fff;border-color:#d5dadd;color:#263034}
+.theme-light .profile>svg{color:#687277}
+.theme-light .profile-menu{background:#fff;border-color:#d3d9dc;box-shadow:0 14px 34px #24313a24}
+.theme-light .profile-menu-heading{border-color:#e1e5e7}
+.theme-light .profile-menu-heading b,.theme-light .profile-menu>button{color:#273136}
+.theme-light .profile-menu-heading span{color:#737e83}
+.theme-light .profile-menu>button:hover{background:#eef1f2;color:#111}
+.theme-light .nav-item{color:#566166}
+.theme-light .nav-item:hover{background:#dce1e3;color:#202528}
+.theme-light .nav-item.selected{background:#dce2e3;box-shadow:inset 2px 0 var(--accent,#b79a43)}
+.theme-light .topbar,.theme-light footer{border-color:#d7dcdf}
+.theme-light .hero{background:linear-gradient(110deg,#fff,#eef1f2 65%,#f5f1e7);border-color:#d7dcdf}
+.theme-light .hero h1{color:#202528}
+.theme-light .hero p,.theme-light .empty-page p{color:#657176}
+.theme-light .quick-icon{background:#f1eddf;color:#8b7431}
+.theme-light .build-card-top:hover{background:#f0f2f3}
+.theme-light .build-details{background:#f8f9f9;border-color:#dce1e3}
+.theme-light .detail-grid b{color:#273136}
+.theme-light .wide-input,.theme-light .instance-controls select,.theme-light .create-row input,.theme-light .edit-build input:not([type=file]){background:#fff;color:#263034;border-color:#cbd2d6}
+.theme-light .field-label,.theme-light .edit-build label:not(.file-picker){color:#4d5a60}
+.theme-light .outline{border-color:#9ba5aa;color:#344147}
+.theme-light .outline:hover{background:#e8edef;border-color:#68757b}
+.theme-light .icon-button{color:#59666c}
+.theme-light .theme-option{background:#fff;color:#39464c;border-color:#b8c1c6}
+.theme-light .theme-option.active{background:#f4efdc;color:#5e4b13;border-color:var(--accent,#b79a43)}
+.theme-light .avatar-option{background:#edf0f1;border-color:#cbd2d6}
+.theme-light .notice{background:#f8f5e9;border-color:#e1d7b5;color:#5f563b}
+.theme-light .notice b{color:#51451f}
+.theme-light .toast{background:#fff;border-color:#cbd2d6;color:#273136;box-shadow:0 12px 40px #26343a24}
+.theme-light .toast button{color:#273136}
+.theme-light .coming{color:#796326;border-color:#cfc39a}
+.theme-light .empty-icon{background:#ecefe9;color:#8a7433}
+.theme-light .runtime-panel small,.theme-light .runtime-panel b{color:#566166}
+.theme-light .install-panel{background:#f8f5e9;border-color:#ded3ad}
+.theme-light .install-panel b{color:#594c25}
+.theme-light .install-panel small{color:#716a55}
+.theme-light .settings-card{box-shadow:0 2px 8px #26343a08}
+.theme-light .device-box{background:#f5f3e9;border-color:#d7cca7}
+.theme-light .device-box b,.theme-light .device-box small{color:#5d563f}
+.theme-light .coming{background:#fff}
+.theme-light .accent-input{background:#e4e7e9;border-color:#bfc5c8}
+.theme-light .startup-screen{background:#f2f4f5;color:#202528}
+.theme-light .startup-screen p{color:#667176}
+.theme-light .startup-progress{background:#d9dfe2}
+@media(prefers-reduced-motion:reduce){.profile-menu{animation:none}}
