@@ -473,3 +473,32 @@ button:focus-visible{outline:2px solid var(--accent,#d8bd64);outline-offset:3px}
 
 /* Temporarily hide the cosmetic workshop entry; keep its implementation for a later release. */
 .sidebar nav .nav-item:has(svg.lucide-palette){display:none}
+
+/* Bedrock Edition profiles and native Windows installation status */
+.bedrock-install-state{display:flex;align-items:center;gap:12px;padding:14px 16px;margin:14px 0;border:1px solid #59413a;background:#241d1b;border-radius:10px;color:#e1a18c}
+.bedrock-install-state.is-installed{border-color:#345542;background:#1b2520;color:#8fcea6}
+.bedrock-install-state div,.bedrock-install-state b,.bedrock-install-state span{display:block}
+.bedrock-install-state b{font-size:11px;color:var(--text,#eceef0);margin-bottom:4px}
+.bedrock-install-state span{font-size:9px;color:var(--muted,#899296);overflow-wrap:anywhere}
+.bedrock-refresh{margin-left:auto;flex:none}
+.bedrock-paths{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px;margin:12px 0}
+.bedrock-paths>div{display:flex;gap:8px;align-items:flex-start;padding:11px;background:var(--panel,#191c1e);border:1px solid var(--line,#303537);border-radius:8px;min-width:0}
+.bedrock-paths svg{flex:none;color:var(--accent,#d8bd64)}
+.bedrock-paths b,.bedrock-paths small{display:block}
+.bedrock-paths b{font-size:10px;margin-bottom:4px}
+.bedrock-paths small{font-size:8px;color:var(--muted,#899296);overflow-wrap:anywhere;line-height:1.5}
+.bedrock-profiles{margin-top:14px;padding:17px}
+.bedrock-count{font-size:10px;color:var(--muted,#899296);background:var(--surface,#25292b);padding:4px 8px;border-radius:20px}
+.bedrock-create{display:flex;gap:8px;margin-top:14px}
+.bedrock-create input{flex:1;min-width:0;background:var(--surface,#24292b);color:var(--text,#eceef0);border:1px solid var(--line,#3a4143);border-radius:7px;padding:10px 12px;font:11px Inter}
+.bedrock-profile-list{display:grid;gap:8px;margin-top:12px}
+.bedrock-profile{display:flex;align-items:center;gap:10px;padding:10px;background:var(--surface,#202426);border:1px solid var(--line,#303537);border-radius:8px}
+.bedrock-profile-icon{width:34px;height:34px;display:grid;place-items:center;background:#294436;color:#8fcea6;border-radius:8px;flex:none}
+.bedrock-profile-copy{flex:1;min-width:0}
+.bedrock-profile-copy b,.bedrock-profile-copy small{display:block}
+.bedrock-profile-copy b{font-size:11px}
+.bedrock-profile-copy small{font-size:8px;color:var(--muted,#899296);margin-top:4px}
+.bedrock-empty{font-size:10px;color:var(--muted,#899296);padding:12px 0}
+.bedrock-message{margin-top:10px;padding:10px 12px;border-radius:8px;background:#1e2923;border:1px solid #345542;color:#9ed4ad;font-size:10px;line-height:1.5}
+.bedrock-message.error{background:#2a201e;border-color:#634039;color:#e6a18e}
+@media(max-width:760px){.bedrock-paths{grid-template-columns:1fr}.bedrock-create{flex-direction:column}.bedrock-profile{flex-wrap:wrap}}
