@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type CSSProperties } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { Home, Gamepad2, Users, Layers3, Server, Settings, Plus, Play, ChevronDown, Sparkles, ShieldCheck, CircleHelp, Trash2, Pencil, X, LoaderCircle } from "lucide-react";
 import { getMinecraftVersions, type MinecraftVersion } from "./lib/minecraft";
 import { invoke } from "@tauri-apps/api/core";
@@ -41,6 +41,9 @@ const dateLabel = (timestamp?: number | null) => timestamp
 export default function App() {
   const [page, setPage] = useState<Page>("Главная");
   const [appBooting, setAppBooting] = useState(true);
+  const startupStarted = useRef(false);
+  const [startupStatus, setStartupStatus] = useState("Загружаем игровой центр…");
+  const [buildPreparation, setBuildPreparation] = useState<Record<string, { status: "preparing" | "ready" | "error"; message: string }>>({});
   const [accentColor, setAccentColor] = useState(() => localStorage.getItem("losa.accentColor") ?? "#d8bd64");
   const [offlineName, setOfflineName] = useState(() => localStorage.getItem("losa.offlineName") ?? "");
   const [offlineNameDraft, setOfflineNameDraft] = useState(() => localStorage.getItem("losa.offlineName") ?? "");
@@ -67,8 +70,8 @@ export default function App() {
 
   const loadInstances = async () => {
     setLoadingInstances(true);
-    try { setInstances(await invoke<LauncherInstance[]>("list_instances")); }
-    catch (e) { setError(asMessage(e)); }
+    try { const loaded = await invoke<LauncherInstance[]>("list_instances"); setInstances(loaded); return loaded; }
+    catch (e) { setError(asMessage(e)); return []; }
     finally { setLoadingInstances(false); }
   };
 
@@ -84,7 +87,40 @@ export default function App() {
   };
 
   useEffect(() => {
-    void Promise.all([loadInstances(), loadVersions()]).finally(() => setAppBooting(false));
+    if (startupStarted.current) return;
+    startupStarted.current = true;
+    const boot = async () => {
+      const [savedInstances] = await Promise.all([loadInstances(), loadVersions()]);
+      const uniqueVersions = [...new Map(savedInstances.map(instance => [instance.versionId, instance])).values()];
+      for (let index = 0; index < uniqueVersions.length; index += 1) {
+        const instance = uniqueVersions[index];
+        const sameVersionIds = savedInstances.filter(item => item.versionId === instance.versionId).map(item => item.id);
+        setStartupStatus(`Проверяем сборку ${index + 1} из ${uniqueVersions.length}: ${instance.name}`);
+        setBuildPreparation(current => {
+          const next = { ...current };
+          sameVersionIds.forEach(id => { next[id] = { status: "preparing", message: "Проверяем файлы, библиотеки, ресурсы и Java…" }; });
+          return next;
+        });
+        try {
+          await invoke("prepare_instance", { instanceId: instance.id });
+          setBuildPreparation(current => {
+            const next = { ...current };
+            sameVersionIds.forEach(id => { next[id] = { status: "ready", message: "Всё готово к запуску" }; });
+            return next;
+          });
+        } catch (e) {
+          const message = asMessage(e);
+          setBuildPreparation(current => {
+            const next = { ...current };
+            sameVersionIds.forEach(id => { next[id] = { status: "error", message }; });
+            return next;
+          });
+        }
+      }
+      setStartupStatus("Игровой центр готов");
+      setAppBooting(false);
+    };
+    void boot().catch(e => { setError(asMessage(e)); setAppBooting(false); });
   }, []);
 
   const recentInstances = useMemo(
@@ -116,6 +152,7 @@ export default function App() {
       setNewName(""); setNewIcon(null); setNewIconIndex(null);
       setNotice("Сборка создана. LoSA автоматически подготавливает Minecraft, библиотеки, ресурсы и Java.");
       await invoke("prepare_instance", { instanceId: instance.id });
+      setBuildPreparation(current => ({ ...current, [instance.id]: { status: "ready", message: "Всё готово к запуску" } }));
       setNotice("Сборка полностью подготовлена. Можно играть.");
       await loadInstances();
     } catch (e) {
@@ -183,11 +220,12 @@ export default function App() {
 
   const BuildCard = ({ instance }: { instance: LauncherInstance }) => {
     const expanded = expandedId === instance.id;
+    const preparation = buildPreparation[instance.id];
     return <article className="build-card">
       <div className="build-card-top" onClick={() => setExpandedId(expanded ? null : instance.id)} role="button" tabIndex={0}
         onKeyDown={event => { if (event.target === event.currentTarget && (event.key === "Enter" || event.key === " ")) setExpandedId(expanded ? null : instance.id); }}>
         <div className="build-logo">{instance.iconDataUrl ? <img src={instance.iconDataUrl} alt="" /> : <span>{instance.name.slice(0, 1).toUpperCase()}</span>}</div>
-        <div className="build-summary"><b>{instance.name}</b><small>Minecraft {instance.versionId} · Java Edition · Vanilla</small></div>
+        <div className="build-summary"><b>{instance.name}</b><small>Minecraft {instance.versionId} · Java Edition · Vanilla</small>{preparation && <small className={"build-preparation " + preparation.status} title={preparation.message}>{preparation.status === "ready" ? "✓ " : preparation.status === "error" ? "! " : "◌ "}{preparation.message}</small>}</div>
         <span className="build-last-played">{dateLabel(instance.lastPlayedAt)}</span>
         <button className="primary build-play" disabled={busyId === instance.id} onClick={event => { event.stopPropagation(); void launchBuild(instance); }}>
           {busyId === instance.id ? <LoaderCircle size={15} className="spin" /> : <Play size={15} fill="currentColor" />} Играть
@@ -215,17 +253,17 @@ export default function App() {
     {appBooting && <div className="startup-screen" role="status" aria-label="Загрузка L.o.S.A.">
       <img className="startup-logo" src="/losa-logo.png" alt="Логотип L.o.S.A." />
       <div className="startup-progress"><span /></div>
-      <p>Загружаем игровой центр…</p>
+      <p>{startupStatus}</p>
     </div>}
     <aside className="sidebar">
       <div className="brand"><img src="/losa-logo.png" /><div><b>L.o.S.A.</b></div></div>
       <div className="profile"><div className="avatar">{(offlineName || "Г").slice(0, 1).toUpperCase()}</div><div className="profile-copy"><b>{offlineName || "Гость"}</b><span>Локальный Offline-профиль</span></div><ChevronDown size={15} /></div>
       <div className="nav-label">БИБЛИОТЕКА</div>
       <nav>{nav.map(({ name, icon: Icon }) => <button key={name} className={page === name ? "nav-item selected" : "nav-item"} onClick={() => setPage(name)}><Icon size={18} /><span>{name}</span></button>)}</nav>
-      <div className="sidebar-bottom"><div className="status-dot" /> Offline-режим <span className="version">v0.10.0</span></div>
+      <div className="sidebar-bottom"><div className="status-dot" /> Offline-режим <span className="version">v0.10.1</span></div>
     </aside>
     <main className="main">
-      <header className="topbar"><div className="crumb">L.o.S.A. <span>/</span> {page}</div><button className="icon-button" title="Справка" onClick={() => setNotice("L.o.S.A. 0.10.0 — обновлённый игровой центр и управление сборками.")}><CircleHelp size={18} /></button></header>
+      <header className="topbar"><div className="crumb">L.o.S.A. <span>/</span> {page}</div><button className="icon-button" title="Справка" onClick={() => setNotice("L.o.S.A. 0.10.1 — предварительная подготовка сборок при запуске.")}><CircleHelp size={18} /></button></header>
       {page === "Главная" && <section className="content">
         {instances.length === 0 ? <div className="hero"><div className="hero-copy"><div className="eyebrow"><Sparkles size={14} /> ВАШ MINECRAFT. ВАШИ ПРАВИЛА.</div><h1>Добро пожаловать<br /><em>в L.o.S.A.</em></h1><p>Создай первую сборку — LoSA сама подготовит игровые файлы и Java.</p><button className="primary" onClick={() => { setPage("Играть"); setShowCreate(true); }}><Plus size={16} /> Создать первую сборку</button></div><img className="hero-mark" src="/losa-logo.png" /></div>
         : <><div className="page-title"><div className="eyebrow">ТВОЙ ИГРОВОЙ ЦЕНТР</div><h1>С возвращением</h1><p>Недавно запускавшиеся сборки и быстрый переход к игре.</p></div><div className="section-head"><div><h2>Недавняя активность</h2><p>Сборки отсортированы по последнему запуску</p></div><button className="outline" onClick={() => { setPage("Играть"); setShowCreate(true); }}><Plus size={15} /> Новая сборка</button></div><div className="build-list">{recentInstances.map(instance => <BuildCard key={instance.id} instance={instance} />)}</div></>}
