@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react"
 import { Home, Gamepad2, Users, Layers3, Server, Settings, Plus, Play, ChevronDown, Sparkles, ShieldCheck, CircleHelp, Trash2, Pencil, X, LoaderCircle, MessageCircle, Store, Crown, Search, Send, Heart, Globe, Shield, Cpu, HardDrive, ArrowUpRight, Palette, ImagePlus, Copy, Save, Eye } from "lucide-react";
 import { getMinecraftVersions, type MinecraftVersion } from "./lib/minecraft";
 import { invoke } from "@tauri-apps/api/core";
+import { checkModCompatibility, type ModrinthVersionInfo } from "./lib/mod-compatibility";
 
 type Page = "Главная" | "Играть" | "Лобби" | "Друзья" | "Чат" | "Магазин" | "Мастерская" | "Моды и сборки" | "Серверы" | "Настройки";
 type LauncherInstance = {
@@ -54,7 +55,7 @@ type CosmeticDraft = {
   id: string; name: string; description: string; category: string; rarity: string;
   price: string; glyph: string; image: string; updatedAt: number;
 };
-const cosmeticCategories = ["Головные уборы", "Питомцы", "Эмоции", "Накидки", "Ауры", "Рамки", "Титулы"];
+const cosmeticCategories = ["Головные уборы", "Питомцы", "Эмоции", "Плащи", "Ауры", "Рамки", "Титулы"];
 const emptyCosmetic = (): CosmeticDraft => ({
   id: crypto.randomUUID(), name: "", description: "", category: "Головные уборы",
   rarity: "Обычная", price: "Бесплатно", glyph: "✦", image: "", updatedAt: Date.now()
@@ -136,6 +137,91 @@ function CosmeticWorkshop({ setNotice }: { setNotice: (message: string) => void 
     <div className="section-head workshop-drafts-heading"><div><h2>Мои черновики</h2><p>{drafts.length} сохранено на этом устройстве</p></div></div>
     {drafts.length === 0 ? <div className="community-panel workshop-empty"><ImagePlus size={24}/><b>Пока нет черновиков</b><span>Создай первый предмет — он появится здесь.</span></div> : <div className="workshop-drafts">{drafts.map(d => <article className="workshop-draft-card" key={d.id}><button className="workshop-draft-open" onClick={() => loadDraft(d)}><span className="workshop-draft-art">{d.image ? <img src={d.image} alt=""/> : d.glyph}</span><span><b>{d.name}</b><small>{d.category} · {d.rarity}</small></span></button><div className="workshop-draft-actions"><button className="icon-button" title="Дублировать" onClick={() => duplicateDraft(d)}><Copy size={14}/></button><button className="icon-button danger-action" title="Удалить" onClick={() => removeDraft(d.id)}><Trash2 size={14}/></button></div></article>)}</div>}
     <div className="prototype-note"><ShieldCheck size={16}/> Сейчас редактор создаёт визуальные карточки и локальные черновики. Игровые 3D-модели, текстуры Minecraft, анимации питомцев и применение предметов на персонаже — отдельный следующий этап.</div>
+  </section>;
+}
+
+
+type ModrinthHit = { project_id: string; slug: string; title: string; description: string; author: string; downloads: number; icon_url?: string; categories: string[]; versions: string[]; project_type: string };
+
+function ModsAndPacks() {
+  const [section, setSection] = useState<"mods" | "packs" | "bedrock">("mods");
+  const [edition, setEdition] = useState<"Java" | "Bedrock">("Java");
+  const [query, setQuery] = useState("");
+  const [loader, setLoader] = useState("fabric");
+  const [gameVersion, setGameVersion] = useState("1.21.4");
+  const [hits, setHits] = useState<ModrinthHit[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [selected, setSelected] = useState<ModrinthHit | null>(null);
+  const [versionInfo, setVersionInfo] = useState<ModrinthVersionInfo[]>([]);
+  const [versionLoading, setVersionLoading] = useState(false);
+  const [compatibility, setCompatibility] = useState<ReturnType<typeof checkModCompatibility> | null>(null);
+  const search = async () => {
+    if (edition === "Bedrock" || section === "bedrock") { setError("Каталог Bedrock-аддонов подключается отдельным источником. Java-моды Modrinth не смешиваются с Bedrock."); return; }
+    setLoading(true); setError(""); setSelected(null);
+    try {
+      const type = section === "packs" ? "modpack" : "mod";
+      const facets = JSON.stringify([[ "project_type:" + type ], [ "versions:" + gameVersion ], ...(section === "mods" && loader !== "any" ? [[ "categories:" + loader ]] : [])]);
+      const url = "https://api.modrinth.com/v2/search?query=" + encodeURIComponent(query.trim()) + "&facets=" + encodeURIComponent(facets) + "&limit=24&index=relevance";
+      const response = await fetch(url, { headers: { Accept: "application/json" } });
+      if (!response.ok) throw new Error("Modrinth ответил с ошибкой " + response.status);
+      const data = await response.json() as { hits: ModrinthHit[] };
+      setHits(data.hits ?? []);
+    } catch (e) { setError(e instanceof Error ? e.message : String(e)); }
+    finally { setLoading(false); }
+  };
+  useEffect(() => { void search(); }, [section, edition, gameVersion, loader]);
+  useEffect(() => {
+    if (!selected || section === "bedrock") { setVersionInfo([]); setCompatibility(null); return; }
+    let active = true;
+    setVersionLoading(true);
+    const params = new URLSearchParams({ game_versions: JSON.stringify([gameVersion]), loaders: JSON.stringify(loader === "any" ? [] : [loader]) });
+    fetch("https://api.modrinth.com/v2/project/" + selected.project_id + "/version?" + params.toString(), { headers: { Accept: "application/json" } })
+      .then(response => { if (!response.ok) throw new Error("Не удалось получить версии проекта (" + response.status + ")"); return response.json() as Promise<ModrinthVersionInfo[]>; })
+      .then(versions => {
+        if (!active) return;
+        setVersionInfo(versions);
+        const latest = versions[0];
+        setCompatibility(latest ? checkModCompatibility(latest, gameVersion, loader, []) : null);
+      })
+      .catch(() => { if (active) { setVersionInfo([]); setCompatibility(null); } })
+      .finally(() => { if (active) setVersionLoading(false); });
+    return () => { active = false; };
+  }, [selected, gameVersion, loader, section]);
+  const formatDownloads = (value: number) => new Intl.NumberFormat("ru-RU", { notation: "compact" }).format(value);
+  return <section className="content mods-content">
+    <div className="page-title"><div className="eyebrow"><Layers3 size={13}/> L.o.S.A. MOD CENTER</div><h1>Моды и сборки</h1><p>Ищи отдельные моды и готовые наборы. Для каждого проекта можно проверить версию игры и загрузчик.</p></div>
+    <div className="mods-switcher">
+      <button className={section === "mods" ? "active" : ""} onClick={() => { setSection("mods"); setEdition("Java"); }}>Моды</button>
+      <button className={section === "packs" ? "active" : ""} onClick={() => { setSection("packs"); setEdition("Java"); }}>Сборки</button>
+      <button className={section === "bedrock" ? "active" : ""} onClick={() => { setSection("bedrock"); setEdition("Bedrock"); }}>Bedrock</button>
+    </div>
+    {section !== "bedrock" ? <>
+      <div className="mods-filters">
+        <label>Издание<select value={edition} onChange={e => setEdition(e.target.value as "Java" | "Bedrock")}><option>Java</option><option>Bedrock</option></select></label>
+        <label>Версия Minecraft<select value={gameVersion} onChange={e => setGameVersion(e.target.value)}>{["1.21.11","1.21.10","1.21.9","1.21.8","1.21.7","1.21.6","1.21.5","1.21.4","1.21.3","1.21.1","1.20.6","1.20.4","1.20.1","1.19.4"].map(v => <option key={v}>{v}</option>)}</select></label>
+        {section === "mods" && <label>Загрузчик<select value={loader} onChange={e => setLoader(e.target.value)}><option value="fabric">Fabric</option><option value="forge">Forge</option><option value="neoforge">NeoForge</option><option value="quilt">Quilt</option><option value="any">Любой</option></select></label>}
+      </div>
+      <form className="mods-search" onSubmit={e => { e.preventDefault(); void search(); }}><Search size={17}/><input value={query} onChange={e => setQuery(e.target.value)} placeholder={section === "packs" ? "Найти сборку…" : "Найти мод…"} /><button className="primary" type="submit" disabled={loading}>{loading ? "Поиск…" : "Найти"}</button></form>
+      {error && <div className="mods-error">{error}</div>}
+      {loading ? <div className="mods-empty"><LoaderCircle className="spin"/> Загружаем каталог Modrinth…</div> : hits.length === 0 ? <div className="mods-empty">Ничего не найдено. Попробуй изменить запрос или фильтры.</div> : <div className="mods-grid">{hits.map(hit => <article className="mod-card" key={hit.project_id}>
+        <div className="mod-card-head">{hit.icon_url ? <img src={hit.icon_url} alt="" /> : <span><Layers3/></span>}<div><b>{hit.title}</b><small>от {hit.author}</small></div></div>
+        <p>{hit.description}</p><div className="mod-meta"><span>{formatDownloads(hit.downloads)} загрузок</span><span>{hit.versions.length} версий</span></div>
+        <button className="outline" onClick={() => setSelected(hit)}>Подробнее</button>
+      </article>)}</div>}
+      {selected && <div className="mod-detail">
+        <button className="icon-button" onClick={() => setSelected(null)}><X size={17}/></button><h2>{selected.title}</h2><p>{selected.description}</p>
+        <div className="mod-meta"><span>Автор: {selected.author}</span><span>Поддерживаемые версии: {selected.versions.slice(0,8).join(", ")}</span></div>
+        <div className="compatibility-result"><b>Проверка совместимости</b>{versionLoading ? <span>Проверяем версии и загрузчик…</span> : compatibility ? <><span className={compatibility.compatible ? "compat-ok" : "compat-bad"}>{compatibility.compatible ? "Подходит для выбранной версии" : "Есть несовместимость"}</span><small>Игра: {compatibility.gameSupported ? "поддерживается" : "не поддерживается"} · Загрузчик: {compatibility.loaderSupported ? "поддерживается" : "не поддерживается"}</small>{compatibility.missingRequired.length > 0 && <small>Обязательные зависимости для установки: {compatibility.missingRequired.map(d => d.project_id).join(", ")}</small>}{compatibility.conflicts.length > 0 && <small>Конфликтующие проекты: {compatibility.conflicts.map(d => d.project_id).join(", ")}</small>}</> : <span>Нет опубликованной версии для выбранных условий.</span>}{versionInfo[0] && <small>Версия проекта: {versionInfo[0].version_number}</small>}</div>
+        <a className="outline" href={"https://modrinth.com/" + (section === "packs" ? "modpack/" : "mod/") + selected.slug} target="_blank" rel="noreferrer">Открыть страницу и версии на Modrinth <ArrowUpRight size={14}/></a>
+        <p className="mods-footnote">Пока доступен поиск и просмотр каталога. Установка файла в выбранную сборку и автоматическая проверка зависимостей будут подключены следующим техническим шагом — кнопка установки не имитируется.</p>
+      </div>}
+      <p className="mods-footnote">Источник каталога: Modrinth API. Загрузка и установка отдельных файлов в папку сборки пока не включены.</p>
+    </> : <div className="bedrock-hub">
+      <div className="bedrock-banner"><div className="bedrock-mark">B</div><div><span className="panel-kicker">ОТДЕЛЬНОЕ ИЗДАНИЕ</span><h2>Bedrock Edition</h2><p>Аддоны, наборы ресурсов и миры будут управляться отдельно от Java-модов.</p></div></div>
+      <div className="bedrock-grid"><article><b>Аддоны</b><span>.mcaddon · .mcpack</span><small>Каталог и установка аддонов — следующий этап</small></article><article><b>Ресурспаки</b><span>Текстуры и звуки</span><small>Импорт и управление наборами ресурсов</small></article><article><b>Миры и шаблоны</b><span>.mcworld</span><small>Отдельная библиотека миров Bedrock</small></article><article><b>Совместимость</b><span>Bedrock build + зависимости</span><small>Проверку будет выполнять отдельный скрипт</small></article></div>
+      <div className="prototype-note"><ShieldCheck size={16}/> Bedrock не использует Java-загрузчики Fabric/Forge. Для него будут отдельные каталоги, форматы файлов и сценарии установки. Этот экран — начало отдельного Bedrock-раздела, не готовый установщик.</div>
+    </div>}
   </section>;
 }
 
@@ -449,10 +535,10 @@ export default function App() {
       {page === "Мастерская" && <CosmeticWorkshop setNotice={setNotice} />}
       {page === "Магазин" && <section className="content community-content">
         <div className="page-title"><div className="eyebrow"><Store size={13}/> L.o.S.A. STORE</div><h1>Магазин</h1><p>Косметика, которая помогает выразить свой стиль в игре и профиле.</p></div>
-        <div className="store-hero"><div><span className="panel-kicker">ТВОЙ СТИЛЬ — ТВОИ ПРАВИЛА</span><h2>Сделай профиль<br/>узнаваемым</h2><p>Накидки, спутники, ауры, эмоции и оформление профиля.</p></div><div className="store-hero-gem">✧</div></div>
-        <div className="store-toolbar">{["Все","Накидки","Головные уборы","Питомцы","Ауры","Эмоции","Рамки","Титулы"].map(c=><button key={c} className={storeCategory===c?"active":""} onClick={()=>setStoreCategory(c)}>{c}</button>)}</div>
+        <div className="store-hero"><div><span className="panel-kicker">ТВОЙ СТИЛЬ — ТВОИ ПРАВИЛА</span><h2>Сделай профиль<br/>узнаваемым</h2><p>Плащи, спутники, ауры, эмоции и оформление профиля.</p></div><div className="store-hero-gem">✧</div></div>
+        <div className="store-toolbar">{["Все","Плащи","Головные уборы","Питомцы","Ауры","Эмоции","Рамки","Титулы"].map(c=><button key={c} className={storeCategory===c?"active":""} onClick={()=>setStoreCategory(c)}>{c}</button>)}</div>
         <div className="store-grid">{[
-          {name:"Северное сияние",kind:"Накидки",price:"Косметика",glyph:"✦",tone:"aurora"},
+          {name:"Северное сияние",kind:"Плащи",price:"Косметика",glyph:"✦",tone:"aurora"},
           {name:"Звёздная аура",kind:"Ауры",price:"Косметика",glyph:"✧",tone:"star"},
           {name:"Рамка созвездия",kind:"Рамки",price:"Профиль",glyph:"◇",tone:"frame"},
           {name:"Лунный след",kind:"Ауры",price:"Эффект",glyph:"☾",tone:"moon"},
@@ -493,7 +579,7 @@ export default function App() {
         <div className="prototype-note"><ShieldCheck size={16}/> Витрина и категории готовы как интерфейс. Баланс, инвентарь и покупки пока отключены.</div>
       </section>}
       {page === "Друзья" && <section className="content community-content"><div className="page-title"><div className="eyebrow"><Users size={13}/> COMMUNITY</div><h1>Друзья</h1><p>Твой круг игроков в L.o.S.A. — независимо от издания Minecraft.</p></div><div className="community-panel"><div className="panel-heading"><div><b>Найти игроков</b><small>Поиск по нику — пока демонстрационный</small></div></div><div className="search-field friend-search"><Search size={16}/><input value={friendQuery} onChange={e=>setFriendQuery(e.target.value)} placeholder="Введи игровой ник…"/></div><div className="friend-results">{[{name:"Alex",title:"Исследователь",status:"В сети"},{name:"Mira",title:"Хранитель миров",status:"Недавно была"},{name:"Jamie",title:"Мастер редстоуна",status:"В сети"}].filter(f=>f.name.toLowerCase().includes(friendQuery.toLowerCase())||f.title.toLowerCase().includes(friendQuery.toLowerCase())).map(f=><div className="friend-result" key={f.name}><span className="direct-avatar">{f.name[0]}</span><div><b>{f.name}</b><small>{f.title}</small></div><span className="friend-presence">{f.status}</span><button className="outline" onClick={()=>setNotice("Заявки в друзья заработают после подключения аккаунтов L.o.S.A.")}>Добавить</button></div>)}</div></div><div className="referral-panel community-panel"><div className="referral-top"><div><span className="panel-kicker">ПРИГЛАШАЙ ДРУЗЕЙ</span><h2>Твой код приглашения</h2><p>Делись кодом L.o.S.A. и собирай свою команду</p></div><div className="referral-icon"><Users size={30}/></div></div><div className="referral-code"><div><small>ЛИЧНЫЙ КОД</small><b>Появится после запуска аккаунтов</b></div><span className="coming">Скоро</span></div><div className="referral-progress"><div className="referral-progress-head"><b>Путь к модератору</b><strong>0 из 5 друзей</strong></div><div className="referral-track"><span style={{width:"0%"}}/></div><p>Когда пять приглашённых пользователей зарегистрируются по твоему коду и подтвердят аккаунты, система автоматически назначит тебе роль модератора.</p></div><div className="role-ladder"><div className="role-row owner"><span className="role-symbol"><Crown size={16}/></span><div><b>Владелец</b><small>Ты — создатель L.o.S.A. Полный контроль над проектом.</small></div><span className="role-tag">Ты</span></div><div className="role-row deputy"><span className="role-symbol"><ShieldCheck size={16}/></span><div><b>Заместитель владельца</b><small>Выше администратора. Назначается и снимается только лично владельцем.</small></div><span className="role-tag">Личное назначение</span></div><div className="role-row trusted"><span className="role-symbol"><ShieldCheck size={16}/></span><div><b>Доверенный админ</b><small>Назначается лично владельцем или заместителем владельца за особое доверие. Получает расширенные полномочия в рамках поручений.</small></div><span className="role-tag">Личное назначение</span></div><div className="role-row admin"><span className="role-symbol"><Shield size={16}/></span><div><b>Администратор</b><small>Управление сообществом и модерацией в пределах выданных прав.</small></div></div><div className="role-row moderator"><span className="role-symbol"><Users size={16}/></span><div><b>Модератор</b><small>Автоматически за пять подтверждённых приглашений. Помогает поддерживать порядок.</small></div><span className="role-tag">5 приглашений</span></div><div className="role-row member"><span className="role-symbol"><Users size={16}/></span><div><b>Игрок</b><small>Стандартная роль участника сообщества.</small></div></div></div><p className="referral-safety"><ShieldCheck size={14}/> Приглашения должны подтверждаться сервером: один аккаунт — один учёт, собственные и повторные регистрации не засчитываются. Роль нельзя выдать изменением локальных файлов.</p></div>\n<div className="prototype-note"><ShieldCheck size={16}/> Пока используется локальный Offline-профиль. Общие друзья появятся после запуска аккаунтов.</div></section>}
-      {page === "Моды и сборки" && <section className="content empty-page"><div className="empty-icon"><Layers3/></div><div className="eyebrow">L.o.S.A. · MODS</div><h1>Моды и сборки</h1><p>Каталог модов и управление зависимостями будут добавлены отдельным этапом.</p><span className="coming">Каталог готовится</span></section>}
+      {page === "Моды и сборки" && <ModsAndPacks />}
 
       {(error || notice) && <div className={error ? "toast error-toast" : "toast"} onClick={() => { setError(""); setNotice(""); }}>{error || notice}<button aria-label="Закрыть">×</button></div>}
       <footer><span>© 2026 L.o.S.A.</span></footer>
