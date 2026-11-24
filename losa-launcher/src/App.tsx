@@ -45,6 +45,8 @@ export default function App() {
   const [startupStatus, setStartupStatus] = useState("Загружаем игровой центр…");
   const [buildPreparation, setBuildPreparation] = useState<Record<string, { status: "preparing" | "ready" | "error"; message: string }>>({});
   const [accentColor, setAccentColor] = useState(() => localStorage.getItem("losa.accentColor") ?? "#d8bd64");
+  const [theme, setTheme] = useState<"dark" | "light">(() => localStorage.getItem("losa.theme") === "light" ? "light" : "dark");
+  const [profileMenuOpen, setProfileMenuOpen] = useState(false);
   const [offlineName, setOfflineName] = useState(() => localStorage.getItem("losa.offlineName") ?? "");
   const [offlineNameDraft, setOfflineNameDraft] = useState(() => localStorage.getItem("losa.offlineName") ?? "");
   const [instances, setInstances] = useState<LauncherInstance[]>([]);
@@ -67,6 +69,7 @@ export default function App() {
   const [notice, setNotice] = useState("");
 
   useEffect(() => { localStorage.setItem("losa.accentColor", accentColor); }, [accentColor]);
+  useEffect(() => { localStorage.setItem("losa.theme", theme); }, [theme]);
 
   const loadInstances = async () => {
     setLoadingInstances(true);
@@ -249,7 +252,7 @@ export default function App() {
     </article>;
   };
 
-  return <div className="app-shell" style={{ "--accent": accentColor } as CSSProperties}>
+  return <div className={"app-shell theme-" + theme} style={{ "--accent": accentColor } as CSSProperties}>
     {appBooting && <div className="startup-screen" role="status" aria-label="Загрузка L.o.S.A.">
       <img className="startup-logo" src="/losa-logo.png" alt="Логотип L.o.S.A." />
       <div className="startup-progress"><span /></div>
@@ -257,13 +260,16 @@ export default function App() {
     </div>}
     <aside className="sidebar">
       <div className="brand"><img src="/losa-logo.png" /><div><b>L.o.S.A.</b></div></div>
-      <div className="profile"><div className="avatar">{(offlineName || "Г").slice(0, 1).toUpperCase()}</div><div className="profile-copy"><b>{offlineName || "Гость"}</b><span>Локальный Offline-профиль</span></div><ChevronDown size={15} /></div>
+      <div className="profile-wrap" onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setProfileMenuOpen(false); }}>
+        <button type="button" className="profile" aria-haspopup="menu" aria-expanded={profileMenuOpen} onClick={() => setProfileMenuOpen(open => !open)}><div className="avatar">{(offlineName || "Г").slice(0, 1).toUpperCase()}</div><div className="profile-copy"><b>{offlineName || "Гость"}</b><span>Локальный Offline-профиль</span></div><ChevronDown size={15} className={profileMenuOpen ? "profile-chevron open" : "profile-chevron"} /></button>
+        {profileMenuOpen && <div className="profile-menu" role="menu"><div className="profile-menu-heading"><b>{offlineName || "Гость"}</b><span>Локальный профиль</span></div><button type="button" role="menuitem" onClick={() => { setPage("Настройки"); setProfileMenuOpen(false); }}>Настройки профиля</button></div>}
+      </div>
       <div className="nav-label">БИБЛИОТЕКА</div>
       <nav>{nav.map(({ name, icon: Icon }) => <button key={name} className={page === name ? "nav-item selected" : "nav-item"} onClick={() => setPage(name)}><Icon size={18} /><span>{name}</span></button>)}</nav>
-      <div className="sidebar-bottom"><div className="status-dot" /> Offline-режим <span className="version">v0.10.1</span></div>
+      <div className="sidebar-bottom"><div className="status-dot" /> Offline-режим <span className="version">v0.10.3</span></div>
     </aside>
     <main className="main">
-      <header className="topbar"><div className="crumb">L.o.S.A. <span>/</span> {page}</div><button className="icon-button" title="Справка" onClick={() => setNotice("L.o.S.A. 0.10.1 — предварительная подготовка сборок при запуске.")}><CircleHelp size={18} /></button></header>
+      <header className="topbar"><div className="crumb">L.o.S.A. <span>/</span> {page}</div><button className="icon-button" title="Справка" onClick={() => setNotice("L.o.S.A. 0.10.3 — улучшения интерфейса и запуска.")}><CircleHelp size={18} /></button></header>
       {page === "Главная" && <section className="content">
         {instances.length === 0 ? <div className="hero"><div className="hero-copy"><div className="eyebrow"><Sparkles size={14} /> ВАШ MINECRAFT. ВАШИ ПРАВИЛА.</div><h1>Добро пожаловать<br /><em>в L.o.S.A.</em></h1><p>Создай первую сборку — LoSA сама подготовит игровые файлы и Java.</p><button className="primary" onClick={() => { setPage("Играть"); setShowCreate(true); }}><Plus size={16} /> Создать первую сборку</button></div><img className="hero-mark" src="/losa-logo.png" /></div>
         : <><div className="page-title"><div className="eyebrow">ТВОЙ ИГРОВОЙ ЦЕНТР</div><h1>С возвращением</h1><p>Недавно запускавшиеся сборки и быстрый переход к игре.</p></div><div className="section-head"><div><h2>Недавняя активность</h2><p>Сборки отсортированы по последнему запуску</p></div><button className="outline" onClick={() => { setPage("Играть"); setShowCreate(true); }}><Plus size={15} /> Новая сборка</button></div><div className="build-list">{recentInstances.map(instance => <BuildCard key={instance.id} instance={instance} />)}</div></>}
@@ -285,7 +291,7 @@ export default function App() {
         {loadingInstances && <p className="muted small">Загружаем сохранённые сборки…</p>}
       </section>}
       {page === "Настройки" && <section className="content narrow"><div className="page-title"><div className="eyebrow">АККАУНТ И ПРИЛОЖЕНИЕ</div><h1>Настройки</h1><p>Локальный профиль и внешний вид L.o.S.A.</p></div>
-        <div className="settings-card appearance-card"><div className="settings-heading"><div className="quick-icon"><Sparkles /></div><div><b>Внешний вид лаунчера</b><small>Акцентный цвет применяется сразу и сохраняется</small></div></div><label className="field-label" htmlFor="losa-accent-color">Акцентный цвет</label><div className="accent-controls"><input id="losa-accent-color" className="accent-input" type="color" value={accentColor} onChange={e => setAccentColor(e.target.value)} /><span className="muted small">Цвет кнопок, выделений и значков.</span><button className="outline" onClick={() => setAccentColor("#d8bd64")}>Сбросить</button></div></div>
+        <div className="settings-card appearance-card"><div className="settings-heading"><div className="quick-icon"><Sparkles /></div><div><b>Внешний вид лаунчера</b><small>Тема и акцентный цвет сохраняются автоматически</small></div></div><label className="field-label">Тема интерфейса</label><div className="theme-options"><button type="button" className={theme === "dark" ? "theme-option active" : "theme-option"} aria-pressed={theme === "dark"} onClick={() => setTheme("dark")}>Тёмная</button><button type="button" className={theme === "light" ? "theme-option active" : "theme-option"} aria-pressed={theme === "light"} onClick={() => setTheme("light")}>Светлая</button></div><label className="field-label" htmlFor="losa-accent-color">Акцентный цвет</label><div className="accent-controls"><input id="losa-accent-color" className="accent-input" type="color" value={accentColor} onChange={e => setAccentColor(e.target.value)} /><span className="muted small">Цвет кнопок, выделений и значков.</span><button className="outline" onClick={() => setAccentColor("#d8bd64")}>Сбросить</button></div></div>
         <div className="settings-card offline-profile-card"><div className="settings-heading"><div className="quick-icon"><Gamepad2 /></div><div><b>Локальный профиль (Offline)</b><small>Вход по игровому нику для локального тестирования</small></div><span className={offlineName ? "connected" : "disconnected"}>{offlineName ? "Активен" : "Не выбран"}</span></div><label className="field-label" htmlFor="offline-player-name">Игровой ник</label><input id="offline-player-name" className="wide-input" value={offlineNameDraft} onChange={e => setOfflineNameDraft(e.target.value)} maxLength={16} placeholder="Например, Steve_123" /><p className="muted small">От 3 до 16 символов: латинские буквы, цифры и подчёркивание.</p><button className="primary" onClick={saveOfflineProfile}>Сохранить локальный профиль</button></div>
       </section>}
       {page !== "Главная" && page !== "Играть" && page !== "Настройки" && <section className="content empty-page"><div className="empty-icon">{page === "Друзья" ? <Users /> : page === "Моды и сборки" ? <Layers3 /> : <Server />}</div><div className="eyebrow">L.o.S.A. · В РАЗРАБОТКЕ</div><h1>{page}</h1><p>{page === "Друзья" ? "Здесь появятся список друзей, приглашения и совместные лобби." : page === "Моды и сборки" ? "Здесь появится каталог модов и управление ими." : "Здесь появятся избранные серверы и быстрые подключения."}</p><span className="coming">Этот раздел запланирован для следующих этапов</span></section>}
