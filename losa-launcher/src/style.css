@@ -290,3 +290,60 @@ button:focus-visible{outline:2px solid var(--accent,#d8bd64);outline-offset:3px}
 /* Keep the navigation fixed in view while long pages scroll. */
 .sidebar{position:sticky;top:0;height:100vh;align-self:flex-start;overflow-y:auto;}
 .main{min-height:100vh;}
+
+
+/* L.o.S.A. cosmetic concept art — distinct palettes for hats, pets and emotes */
+.store-art.hat-polar{background:radial-gradient(circle at 50% 38%,#e8f7ff,#557d9a 58%,#203b55 100%);color:#f4fcff}
+.store-art.hat-forest{background:radial-gradient(circle at 50% 40%,#a4c98d,#45684c 58%,#1f382f 100%);color:#efffce}
+.store-art.hat-miner{background:radial-gradient(circle at 50% 42%,#ffd27b,#9b6234 58%,#422d25 100%);color:#fff0b8}
+.store-art.hat-mage{background:radial-gradient(circle at 50% 40%,#b9a5ed,#62518d 58%,#302746 100%);color:#f0eaff}
+.store-art.hat-dragon{background:radial-gradient(circle at 50% 40%,#e58b65,#873f3d 58%,#39242c 100%);color:#ffe1bd}
+.store-art.hat-neon{background:radial-gradient(circle at 50% 40%,#77e7dc,#286c7d 58%,#203044 100%);color:#d9ffff}
+.store-art.hat-bloom{background:radial-gradient(circle at 50% 40%,#f3b6cb,#a65e86 58%,#4a304c 100%);color:#fff0f5}
+.store-art.hat-dune{background:radial-gradient(circle at 50% 40%,#e9c27e,#987044 58%,#45372d 100%);color:#fff1cf}
+.store-art.hat-deep{background:radial-gradient(circle at 50% 40%,#7ac8d7,#32677a 58%,#1c3345 100%);color:#e3fbff}
+.store-art.pet-fox{background:radial-gradient(circle at 50% 40%,#f4bd83,#a85d36 58%,#482d28 100%);color:#fff0d8}
+.store-art.pet-drake{background:radial-gradient(circle at 50% 40%,#f18b59,#813b35 58%,#302331 100%);color:#ffe0b7}
+.store-art.pet-owl{background:radial-gradient(circle at 50% 40%,#d7e8ed,#728d9b 58%,#344454 100%);color:#fff}
+.store-art.pet-axo{background:radial-gradient(circle at 50% 40%,#f2b5d1,#a85f8c 58%,#50344e 100%);color:#fff0fa}
+.store-art.pet-golem{background:radial-gradient(circle at 50% 40%,#c5b69b,#777365 58%,#383a38 100%);color:#f6ebd4}
+.store-art.pet-firefly{background:radial-gradient(circle at 50% 40%,#fff1a1,#b69a43 58%,#45402a 100%);color:#fffbd2}
+.store-art.pet-turtle{background:radial-gradient(circle at 50% 40%,#b8d49b,#557d55 58%,#293f36 100%);color:#efffd7}
+.store-art.pet-raven{background:radial-gradient(circle at 50% 40%,#9eafc9,#4b5874 58%,#252c40 100%);color:#f0f3ff}
+.store-art.pet-slime{background:radial-gradient(circle at 50% 40%,#a6edc2,#4d9a83 58%,#254c4a 100%);color:#e6fff0}
+.store-art.emote-dance{background:radial-gradient(circle at 50% 40%,#f4d37b,#a97837 58%,#49372c 100%);color:#fff4c9}
+.store-art.emote-salute{background:radial-gradient(circle at 50% 40%,#a9d9ee,#477b9c 58%,#263e57 100%);color:#eafaff}
+.store-art.emote-laugh{background:radial-gradient(circle at 50% 40%,#f4bd91,#b56a55 58%,#53343a 100%);color:#fff0df}
+.store-art.emote-wow{background:radial-gradient(circle at 50% 40%,#d6b5f0,#805eaa 58%,#392c54 100%);color:#f8edff}
+.store-art.emote-heart{background:radial-gradient(circle at 50% 40%,#f3a8b9,#a94d72 58%,#4c2b45 100%);color:#fff0f5}
+.store-art.emote-wave{background:radial-gradient(circle at 50% 40%,#a8dfd1,#4e9187 58%,#294b4b 100%);color:#edfffa}
+.store-art.emote-shrug{background:radial-gradient(circle at 50% 40%,#c7d0d2,#697b83 58%,#303e4a 100%);color:#f3f8f8}
+.store-art.emote-sleep{background:radial-gradient(circle at 50% 40%,#aeb9eb,#5b659e 58%,#2b3154 100%);color:#f0f1ff}
+.store-art.emote-losa{background:radial-gradient(circle at 50% 40%,#e9d18b,#987a43 58%,#3f3429 100%);color:#fff5cf}
+.theme-light .store-art.hat-polar{background:radial-gradient(circle,#e9f7ff,#c2dbe8 72%);color:#426a83}
+.theme-light .store-art.hat-forest{background:radial-gradient(circle,#e4f2d8,#bfd7b7 72%);color:#496d4b}
+.theme-light .store-art.hat-miner{background:radial-gradient(circle,#fff0c9,#e5c79c 72%);color:#8b5b2e}
+.theme-light .store-art.hat-mage{background:radial-gradient(circle,#eee7ff,#d3c7ef 72%);color:#66518f}
+.theme-light .store-art.hat-dragon{background:radial-gradient(circle,#ffe6d5,#e4b6a4 72%);color:#914b42}
+.theme-light .store-art.hat-neon{background:radial-gradient(circle,#e0ffff,#b7e5e5 72%);color:#36717b}
+.theme-light .store-art.hat-bloom{background:radial-gradient(circle,#ffedf4,#edc8d9 72%);color:#995b7b}
+.theme-light .store-art.hat-dune{background:radial-gradient(circle,#fff3dc,#e9d3aa 72%);color:#8c6a3f}
+.theme-light .store-art.hat-deep{background:radial-gradient(circle,#e2f7fb,#bddde7 72%);color:#3e7180}
+.theme-light .store-art.pet-fox{background:radial-gradient(circle,#ffedda,#e8c6a6 72%);color:#9a5936}
+.theme-light .store-art.pet-drake{background:radial-gradient(circle,#ffe6d6,#e5b6a8 72%);color:#91463d}
+.theme-light .store-art.pet-owl{background:radial-gradient(circle,#f0f6f8,#cbdce3 72%);color:#526c7d}
+.theme-light .store-art.pet-axo{background:radial-gradient(circle,#fff0f7,#e9c7dc 72%);color:#9a5d81}
+.theme-light .store-art.pet-golem{background:radial-gradient(circle,#f0eee7,#d2cdbd 72%);color:#686557}
+.theme-light .store-art.pet-firefly{background:radial-gradient(circle,#fff9d8,#e9dda7 72%);color:#8b7734}
+.theme-light .store-art.pet-turtle{background:radial-gradient(circle,#edf7e5,#c9dfc0 72%);color:#4d7953}
+.theme-light .store-art.pet-raven{background:radial-gradient(circle,#edf0fa,#cbd3e6 72%);color:#52617e}
+.theme-light .store-art.pet-slime{background:radial-gradient(circle,#e5faed,#c0e5d0 72%);color:#43836d}
+.theme-light .store-art.emote-dance{background:radial-gradient(circle,#fff5d9,#ebd7a7 72%);color:#95713b}
+.theme-light .store-art.emote-salute{background:radial-gradient(circle,#e9f7ff,#c5deec 72%);color:#477b99}
+.theme-light .store-art.emote-laugh{background:radial-gradient(circle,#fff0e7,#edc9bd 72%);color:#a55e4f}
+.theme-light .store-art.emote-wow{background:radial-gradient(circle,#f5edff,#d9c9ef 72%);color:#765a9e}
+.theme-light .store-art.emote-heart{background:radial-gradient(circle,#fff0f4,#eac5d1 72%);color:#a65072}
+.theme-light .store-art.emote-wave{background:radial-gradient(circle,#eafff8,#c3e5dc 72%);color:#4d897e}
+.theme-light .store-art.emote-shrug{background:radial-gradient(circle,#f0f4f5,#d1dce0 72%);color:#60747c}
+.theme-light .store-art.emote-sleep{background:radial-gradient(circle,#eff1ff,#cbd1ef 72%);color:#59669b}
+.theme-light .store-art.emote-losa{background:radial-gradient(circle,#fff6df,#e8d7ad 72%);color:#8d713d}
