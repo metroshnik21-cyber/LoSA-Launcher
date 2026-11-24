@@ -21,7 +21,7 @@ on:
       - "feature/v0.9.2-offline-profiles"
       - "feature/launcher-experience-0.10"
       - "feature/referrals-and-roles-0.10.7"
-      - "feature/cosmetic-3d-workshop-0.10.9"
+      - "feature/bedrock-mods-workshop-0.10.8"
     tags:
       - "v*"
 
