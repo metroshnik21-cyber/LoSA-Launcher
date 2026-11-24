@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react"
 import { Home, Gamepad2, Users, Layers3, Server, Settings, Plus, Play, ChevronDown, Sparkles, ShieldCheck, CircleHelp, Trash2, Pencil, X, LoaderCircle, MessageCircle, Store, Crown, Search, Send, Heart, Globe, Shield, Cpu, HardDrive, ArrowUpRight, Palette, ImagePlus, Copy, Save, Eye } from "lucide-react";
 import { getMinecraftVersions, type MinecraftVersion } from "./lib/minecraft";
 import { invoke } from "@tauri-apps/api/core";
+import { checkModCompatibility, type ModrinthVersionInfo } from "./lib/mod-compatibility";
 
 type Page = "Главная" | "Играть" | "Лобби" | "Друзья" | "Чат" | "Магазин" | "Мастерская" | "Моды и сборки" | "Серверы" | "Настройки";
 type LauncherInstance = {
@@ -141,14 +142,7 @@ function CosmeticWorkshop({ setNotice }: { setNotice: (message: string) => void 
 
 
 type ModrinthHit = { project_id: string; slug: string; title: string; description: string; author: string; downloads: number; icon_url?: string; categories: string[]; versions: string[]; project_type: string };
-type ModrinthVersionInfo = { id: string; name: string; version_number: string; game_versions: string[]; loaders: string[]; date_published: string; dependencies: { project_id?: string | null; version_id?: string | null; dependency_type: "required" | "optional" | "incompatible" | "embedded" }[] };
-function checkModCompatibility(version: ModrinthVersionInfo, gameVersion: string, loader: string, installedProjectIds: string[]) {
-  const gameSupported = version.game_versions.includes(gameVersion);
-  const loaderSupported = loader === "any" || version.loaders.includes(loader);
-  const missingRequired = version.dependencies.filter(d => d.dependency_type === "required" && d.project_id && !installedProjectIds.includes(d.project_id));
-  const conflicts = version.dependencies.filter(d => d.dependency_type === "incompatible" && d.project_id && installedProjectIds.includes(d.project_id));
-  return { compatible: gameSupported && loaderSupported && conflicts.length === 0, gameSupported, loaderSupported, missingRequired, conflicts };
-}
+
 function ModsAndPacks() {
   const [section, setSection] = useState<"mods" | "packs" | "bedrock">("mods");
   const [edition, setEdition] = useState<"Java" | "Bedrock">("Java");
