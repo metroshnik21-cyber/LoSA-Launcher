@@ -359,17 +359,45 @@ export default function App() {
       {page === "Магазин" && <section className="content community-content">
         <div className="page-title"><div className="eyebrow"><Store size={13}/> L.o.S.A. STORE</div><h1>Магазин</h1><p>Косметика, которая помогает выразить свой стиль в игре и профиле.</p></div>
         <div className="store-hero"><div><span className="panel-kicker">ТВОЙ СТИЛЬ — ТВОИ ПРАВИЛА</span><h2>Сделай профиль<br/>узнаваемым</h2><p>Накидки, спутники, ауры, эмоции и оформление профиля.</p></div><div className="store-hero-gem">✧</div></div>
-        <div className="store-toolbar">{["Все","Накидки","Спутники","Ауры","Эмоции","Рамки","Титулы"].map(c=><button key={c} className={storeCategory===c?"active":""} onClick={()=>setStoreCategory(c)}>{c}</button>)}</div>
+        <div className="store-toolbar">{["Все","Накидки","Головные уборы","Питомцы","Ауры","Эмоции","Рамки","Титулы"].map(c=><button key={c} className={storeCategory===c?"active":""} onClick={()=>setStoreCategory(c)}>{c}</button>)}</div>
         <div className="store-grid">{[
           {name:"Северное сияние",kind:"Накидки",price:"Косметика",glyph:"✦",tone:"aurora"},
-          {name:"Лис-компаньон",kind:"Спутники",price:"Косметика",glyph:"◆",tone:"fox"},
           {name:"Звёздная аура",kind:"Ауры",price:"Косметика",glyph:"✧",tone:"star"},
-          {name:"Победный жест",kind:"Эмоции",price:"Анимация",glyph:"★",tone:"emote"},
           {name:"Рамка созвездия",kind:"Рамки",price:"Профиль",glyph:"◇",tone:"frame"},
           {name:"Лунный след",kind:"Ауры",price:"Эффект",glyph:"☾",tone:"moon"},
           {name:"Первопроходец",kind:"Титулы",price:"Титул профиля",glyph:"✦",tone:"star"},
-          {name:"Повелитель глубин",kind:"Титулы",price:"Титул профиля",glyph:"♜",tone:"moon"}
-        ].filter(x=>storeCategory==="Все"||x.kind===storeCategory).map(x=><article className="store-card" key={x.name}><div className={"store-art "+x.tone}><span>{x.glyph}</span><i>ПРЕДМЕТ</i></div><div className="store-item-info"><div><h3>{x.name}</h3><small>{x.kind} · {x.price}</small></div><button className="outline" onClick={()=>setNotice("Витрина пока демонстрационная. Реальные покупки и инвентарь появятся после подключения магазина.")}>Скоро</button></div></article>)}</div>
+          {name:"Повелитель глубин",kind:"Титулы",price:"Титул профиля",glyph:"♜",tone:"moon"},
+
+          {name:"Корона полярной звезды",kind:"Головные уборы",price:"Косметика",glyph:"♛",tone:"hat-polar"},
+          {name:"Капюшон сумеречного леса",kind:"Головные уборы",price:"Косметика",glyph:"♧",tone:"hat-forest"},
+          {name:"Шахтёрская каска «Искра»",kind:"Головные уборы",price:"Косметика",glyph:"⛏",tone:"hat-miner"},
+          {name:"Шляпа звёздного картографа",kind:"Головные уборы",price:"Косметика",glyph:"✧",tone:"hat-mage"},
+          {name:"Венец драконьих рогов",kind:"Головные уборы",price:"Косметика",glyph:"♜",tone:"hat-dragon"},
+          {name:"Неоновая гарнитура",kind:"Головные уборы",price:"Косметика",glyph:"♫",tone:"hat-neon"},
+          {name:"Венок летнего рассвета",kind:"Головные уборы",price:"Косметика",glyph:"❀",tone:"hat-bloom"},
+          {name:"Маска песчаного стража",kind:"Головные уборы",price:"Косметика",glyph:"◈",tone:"hat-dune"},
+          {name:"Шлем глубинного исследователя",kind:"Головные уборы",price:"Косметика",glyph:"◉",tone:"hat-deep"},
+
+          {name:"Лис-компаньон «Рыжик»",kind:"Питомцы",price:"Питомец",glyph:"🦊",tone:"pet-fox"},
+          {name:"Дракончик угольного пламени",kind:"Питомцы",price:"Питомец",glyph:"🐉",tone:"pet-drake"},
+          {name:"Полярная сова",kind:"Питомцы",price:"Питомец",glyph:"🦉",tone:"pet-owl"},
+          {name:"Аксолотль-исследователь",kind:"Питомцы",price:"Питомец",glyph:"🦎",tone:"pet-axo"},
+          {name:"Малый каменный голем",kind:"Питомцы",price:"Питомец",glyph:"🪨",tone:"pet-golem"},
+          {name:"Светлячок-комета",kind:"Питомцы",price:"Питомец",glyph:"✹",tone:"pet-firefly"},
+          {name:"Черепашонок с рюкзаком",kind:"Питомцы",price:"Питомец",glyph:"🐢",tone:"pet-turtle"},
+          {name:"Ворон-хранитель",kind:"Питомцы",price:"Питомец",glyph:"🐦‍⬛",tone:"pet-raven"},
+          {name:"Слизень-мимик",kind:"Питомцы",price:"Питомец",glyph:"◉",tone:"pet-slime"},
+
+          {name:"Танец победителя",kind:"Эмоции",price:"Анимация",glyph:"★",tone:"emote-dance"},
+          {name:"Салют команде",kind:"Эмоции",price:"Анимация",glyph:"⚑",tone:"emote-salute"},
+          {name:"Заразительный смех",kind:"Эмоции",price:"Анимация",glyph:"☺",tone:"emote-laugh"},
+          {name:"Ну и ну!",kind:"Эмоции",price:"Анимация",glyph:"!? ",tone:"emote-wow"},
+          {name:"Воздушное сердце",kind:"Эмоции",price:"Анимация",glyph:"♥",tone:"emote-heart"},
+          {name:"Приветствие путешественника",kind:"Эмоции",price:"Анимация",glyph:"✋",tone:"emote-wave"},
+          {name:"Неловкое пожатие плечами",kind:"Эмоции",price:"Анимация",glyph:"〰",tone:"emote-shrug"},
+          {name:"Сон на ходу",kind:"Эмоции",price:"Анимация",glyph:"☾",tone:"emote-sleep"},
+          {name:"Фирменный жест L.o.S.A.",kind:"Эмоции",price:"Анимация",glyph:"✦",tone:"emote- losa"}
+        ].filter(x=>storeCategory==="Все"||x.kind===storeCategory).map(x=><article className="store-card" key={x.name}><div className={"store-art "+x.tone}><span>{x.glyph}</span><i>КОНЦЕПТ</i></div><div className="store-item-info"><div><h3>{x.name}</h3><small>{x.kind} · {x.price}</small></div><button className="outline" onClick={()=>setNotice("Витрина пока демонстрационная. Реальные покупки и инвентарь появятся после подключения магазина.")}>Скоро</button></div></article>)}</div>
         <div className="subscription-section"><div className="section-head"><div><h2>Подписки L.o.S.A.</h2><p>Косметика, титулы и оформление профиля</p></div></div><div className="plan-grid"><article className="plan-card"><span className="plan-label vip"><Crown size={12}/> VIP</span><h3>VIP</h3><p>Больше способов выразить свой стиль</p><div className="plan-spec"><span>Эксклюзивные косметические предметы</span><span>Набор титулов профиля</span><span>Особенная рамка профиля</span></div><b className="plan-price">€2,99 / мес.</b><button className="outline" onClick={()=>setNotice("Подписки пока концептуальные. Оплата и выдача предметов не подключены.")}>Скоро</button></article><article className="plan-card featured"><span className="plan-label vipplus"><Crown size={12}/> VIP+</span><h3>VIP+</h3><p>Расширенная косметическая коллекция</p><div className="plan-spec"><span>Все косметические наборы VIP</span><span>Дополнительные редкие титулы</span><span>Расширенная рамка и эффекты профиля</span></div><b className="plan-price">€5,99 / мес.</b><button className="primary" onClick={()=>setNotice("Подписки пока концептуальные. Оплата и выдача предметов не подключены.")}>Скоро</button></article></div></div>
         <div className="prototype-note"><ShieldCheck size={16}/> Витрина и категории готовы как интерфейс. Баланс, инвентарь и покупки пока отключены.</div>
       </section>}
