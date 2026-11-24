@@ -759,8 +759,19 @@ fn library_rule_allows(library: &serde_json::Value) -> bool {
     allowed
 }
 
+#[cfg(target_os = "windows")]
+fn suppress_console_window(command: &mut std::process::Command) {
+    use std::os::windows::process::CommandExt;
+    command.creation_flags(0x08000000); // CREATE_NO_WINDOW
+}
+
+#[cfg(not(target_os = "windows"))]
+fn suppress_console_window(_command: &mut std::process::Command) {}
+
 fn java_major_at(path: &std::path::Path) -> Option<u32> {
-    let output = std::process::Command::new(path).arg("-version").output().ok()?;
+    let mut command = std::process::Command::new(path);
+    suppress_console_window(&mut command);
+    let output = command.arg("-version").output().ok()?;
     let text = format!("{}\n{}", String::from_utf8_lossy(&output.stdout), String::from_utf8_lossy(&output.stderr));
     parse_java_major(&text)
 }
@@ -780,9 +791,12 @@ fn find_java_executable(directory: &std::path::Path) -> Option<std::path::PathBu
 
 async fn ensure_java_runtime(required_major: u32, root: &std::path::Path) -> Result<std::path::PathBuf, String> {
     #[cfg(target_os = "windows")]
-    let lookup = std::process::Command::new("where.exe").arg("java.exe").output();
+    let mut command = std::process::Command::new("where.exe");
+    suppress_console_window(&mut command);
+    let lookup = command.arg("java.exe").output();
     #[cfg(not(target_os = "windows"))]
-    let lookup = std::process::Command::new("which").arg("java").output();
+    let mut command = std::process::Command::new("which");
+    let lookup = command.arg("java").output();
 
     if let Some(system_java) = lookup.ok().filter(|o| o.status.success())
         .and_then(|o| String::from_utf8_lossy(&o.stdout).lines().next().map(str::trim).filter(|s| !s.is_empty()).map(std::path::PathBuf::from)) {
@@ -1090,7 +1104,9 @@ fn detect_java() -> String {
     let Some(executable) = executable else {
         return "Java не найдена в PATH. Следующим шагом добавим установку подходящей Java прямо из L.o.S.A.".into();
     };
-    let output = match std::process::Command::new(&executable).arg("-version").output() {
+    let mut command = std::process::Command::new(&executable);
+    suppress_console_window(&mut command);
+    let output = match command.arg("-version").output() {
         Ok(output) => output,
         Err(error) => return format!("Java найдена по пути {executable}, но не запускается: {error}"),
     };
