@@ -309,6 +309,29 @@ fn create_instance(name: String, version_id: String, loader: String, icon_data_u
 }
 
 #[tauri::command]
+fn update_instance(instance_id: String, name: String, icon_data_url: Option<String>) -> Result<LauncherInstance, String> {
+    if !valid_instance_id(&instance_id) { return Err("Некорректный идентификатор сборки.".into()); }
+    let name = name.trim();
+    if name.is_empty() || name.chars().count() > 40 {
+        return Err("Название сборки должно содержать от 1 до 40 символов.".into());
+    }
+    if let Some(icon) = icon_data_url.as_deref() {
+        if !icon.starts_with("data:image/") || icon.len() > 2_000_000 {
+            return Err("Логотип должен быть изображением размером не более 1,5 МБ.".into());
+        }
+    }
+    let root = launcher_root()?;
+    let mut instances = read_instances(&root)?;
+    let instance = instances.iter_mut().find(|item| item.id == instance_id)
+        .ok_or_else(|| "Сборка не найдена.".to_string())?;
+    instance.name = name.to_string();
+    if icon_data_url.is_some() { instance.icon_data_url = icon_data_url; }
+    let updated = instance.clone();
+    write_instances(&root, &instances)?;
+    Ok(updated)
+}
+
+#[tauri::command]
 fn delete_instance(instance_id: String) -> Result<(), String> {
     if !valid_instance_id(&instance_id) { return Err("Некорректный идентификатор сборки.".into()); }
     let root = launcher_root()?;
@@ -327,6 +350,11 @@ async fn prepare_instance(instance_id: String) -> Result<MinecraftInstallationSt
         .ok_or_else(|| "Сборка не найдена.".to_string())?;
     install_vanilla_client(instance.version_id.clone()).await?;
     install_minecraft_dependencies(instance.version_id.clone()).await?;
+    let metadata_path = root.join("versions").join(&instance.version_id).join(format!("{}.json", instance.version_id));
+    let metadata_bytes = std::fs::read(&metadata_path).map_err(|e| format!("Не удалось проверить метаданные версии: {e}"))?;
+    let metadata: serde_json::Value = serde_json::from_slice(&metadata_bytes).map_err(|e| format!("Метаданные Minecraft повреждены: {e}"))?;
+    let required_java = metadata.get("javaVersion").and_then(|v| v.get("majorVersion")).and_then(|v| v.as_u64()).map(|v| v as u32).unwrap_or(17);
+    ensure_java_runtime(required_java, &root).await?;
     get_minecraft_installation_status(instance.version_id)
 }
 
@@ -1047,7 +1075,7 @@ fn detect_java() -> String {
 pub fn run() {
     tauri::Builder::default()
         .manage(std::sync::Mutex::new(None::<MinecraftAuthSession>))
-        .invoke_handler(tauri::generate_handler![detect_java, microsoft_auth_configured, start_microsoft_login, complete_microsoft_login, minecraft_auth_status, logout_minecraft, list_instances, create_instance, delete_instance, prepare_instance, install_vanilla_client, install_minecraft_dependencies, get_minecraft_installation_status, launch_minecraft])
+        .invoke_handler(tauri::generate_handler![detect_java, microsoft_auth_configured, start_microsoft_login, complete_microsoft_login, minecraft_auth_status, logout_minecraft, list_instances, create_instance, update_instance, delete_instance, prepare_instance, install_vanilla_client, install_minecraft_dependencies, get_minecraft_installation_status, launch_minecraft])
         .run(tauri::generate_context!())
         .expect("error while running L.o.S.A.");
 }
