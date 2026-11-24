@@ -108,7 +108,7 @@ export default function App() {
     setCreating(true); setError("");
     try {
       const instance = await invoke<LauncherInstance>("create_instance", {
-        name: newName.trim(), versionId: selectedVersion, loader: "vanilla", iconDataUrl: newIcon
+        name: newName.trim(), versionId: selectedVersion, loader: "vanilla", iconDataUrl: newIcon ?? (newIconIndex === null ? null : avatarData(newIconIndex))
       });
       setInstances(current => [instance, ...current]);
       setExpandedId(instance.id);
