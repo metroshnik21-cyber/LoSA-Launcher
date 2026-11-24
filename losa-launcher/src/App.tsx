@@ -296,7 +296,7 @@ export default function App() {
       </section>}
       {page !== "Главная" && page !== "Играть" && page !== "Настройки" && <section className="content empty-page"><div className="empty-icon">{page === "Друзья" ? <Users /> : page === "Моды и сборки" ? <Layers3 /> : <Server />}</div><div className="eyebrow">L.o.S.A. · В РАЗРАБОТКЕ</div><h1>{page}</h1><p>{page === "Друзья" ? "Здесь появятся список друзей, приглашения и совместные лобби." : page === "Моды и сборки" ? "Здесь появится каталог модов и управление ими." : "Здесь появятся избранные серверы и быстрые подключения."}</p><span className="coming">Этот раздел запланирован для следующих этапов</span></section>}
       {(error || notice) && <div className={error ? "toast error-toast" : "toast"} onClick={() => { setError(""); setNotice(""); }}>{error || notice}<button aria-label="Закрыть">×</button></div>}
-      <footer><span>© 2026 L.o.S.A. · Launcher of Spark Anvil</span><span>Сделано Spark_Anvil</span></footer>
+      <footer><span>© 2026 L.o.S.A.</span></footer>
     </main>
   </div>;
 }
