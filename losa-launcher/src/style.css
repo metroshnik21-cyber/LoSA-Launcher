@@ -470,3 +470,6 @@ button:focus-visible{outline:2px solid var(--accent,#d8bd64);outline-offset:3px}
 .theme-light .cosmetic-3d-tools-head b{color:#26353b}
 .theme-light .cosmetic-3d-animation select{background:#fff;color:#26353b;border-color:#c5cfd4}
 @media(max-width:600px){.cosmetic-3d-upload-row,.cosmetic-3d-sliders{grid-template-columns:1fr}.cosmetic-3d-viewer,.cosmetic-3d-host{min-height:280px;height:280px}}
+
+/* Temporarily hide the cosmetic workshop entry; keep its implementation for a later release. */
+.sidebar nav .nav-item:has(svg.lucide-palette){display:none}
