@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type CSSProperties } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { Home, Gamepad2, Users, Layers3, Server, Settings, Plus, Play, ChevronDown, Sparkles, ShieldCheck, CircleHelp, Trash2, Pencil, X, LoaderCircle } from "lucide-react";
 import { getMinecraftVersions, type MinecraftVersion } from "./lib/minecraft";
 import { invoke } from "@tauri-apps/api/core";
@@ -41,6 +41,7 @@ const dateLabel = (timestamp?: number | null) => timestamp
 export default function App() {
   const [page, setPage] = useState<Page>("Главная");
   const [appBooting, setAppBooting] = useState(true);
+  const startupStarted = useRef(false);
   const [startupStatus, setStartupStatus] = useState("Загружаем игровой центр…");
   const [buildPreparation, setBuildPreparation] = useState<Record<string, { status: "preparing" | "ready" | "error"; message: string }>>({});
   const [accentColor, setAccentColor] = useState(() => localStorage.getItem("losa.accentColor") ?? "#d8bd64");
@@ -86,14 +87,13 @@ export default function App() {
   };
 
   useEffect(() => {
-    let cancelled = false;
+    if (startupStarted.current) return;
+    startupStarted.current = true;
     const boot = async () => {
       const [savedInstances] = await Promise.all([loadInstances(), loadVersions()]);
-      if (cancelled) return;
       const uniqueVersions = [...new Map(savedInstances.map(instance => [instance.versionId, instance])).values()];
       for (let index = 0; index < uniqueVersions.length; index += 1) {
         const instance = uniqueVersions[index];
-        if (cancelled) return;
         const sameVersionIds = savedInstances.filter(item => item.versionId === instance.versionId).map(item => item.id);
         setStartupStatus(`Проверяем сборку ${index + 1} из ${uniqueVersions.length}: ${instance.name}`);
         setBuildPreparation(current => {
@@ -117,10 +117,10 @@ export default function App() {
           });
         }
       }
-      if (!cancelled) { setStartupStatus("Игровой центр готов"); setAppBooting(false); }
+      setStartupStatus("Игровой центр готов");
+      setAppBooting(false);
     };
     void boot().catch(e => { setError(asMessage(e)); setAppBooting(false); });
-    return () => { cancelled = true; };
   }, []);
 
   const recentInstances = useMemo(
