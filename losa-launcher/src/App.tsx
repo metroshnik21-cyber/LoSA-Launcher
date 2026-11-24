@@ -24,7 +24,8 @@ const avatarData = (index: number) => {
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" shape-rendering="crispEdges"><rect width="48" height="48" fill="${p.bg}"/><rect x="7" y="5" width="34" height="13" fill="${p.hair}"/><rect x="5" y="12" width="7" height="23" fill="${p.hair}"/><rect x="36" y="12" width="7" height="23" fill="${p.hair}"/><rect x="11" y="12" width="26" height="23" fill="${p.skin}"/><rect x="15" y="20" width="5" height="5" fill="#28282a"/><rect x="29" y="20" width="5" height="5" fill="#28282a"/><rect x="20" y="29" width="9" height="3" fill="#874d45"/><rect x="8" y="36" width="32" height="12" fill="${p.shirt}"/><rect x="5" y="43" width="38" height="5" fill="#25282b"/></svg>`;
   return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
 };
-\nconst asMessage = (error: unknown) => error instanceof Error ? error.message : String(error);
+
+const asMessage = (error: unknown) => error instanceof Error ? error.message : String(error);
 const dateLabel = (timestamp?: number | null) => timestamp
   ? new Date(timestamp * 1000).toLocaleString("ru-RU", { dateStyle: "medium", timeStyle: "short" })
   : "Ещё не запускалась";
@@ -38,7 +39,8 @@ export default function App() {
   const [versions, setVersions] = useState<MinecraftVersion[]>([]);
   const [selectedVersion, setSelectedVersion] = useState("1.21.4");
   const [newName, setNewName] = useState("");
-  const [newIcon, setNewIcon] = useState<string | null>(null);\n  const [newIconIndex, setNewIconIndex] = useState<number | null>(null);
+  const [newIcon, setNewIcon] = useState<string | null>(null);
+  const [newIconIndex, setNewIconIndex] = useState<number | null>(null);
   const [showCreate, setShowCreate] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -187,8 +189,8 @@ export default function App() {
       <div className={expanded ? "build-details expanded" : "build-details"} aria-hidden={!expanded} inert={!expanded}>
         {editingId === instance.id ? <div className="edit-build">
           <label>Название сборки<input value={editName} maxLength={40} onChange={e => setEditName(e.target.value)} /></label>
-          <label className="file-picker"><Upload size={15} /> Заменить логотип<input type="file" accept="image/*" onChange={e => readImage(e, setEditIcon)} /></label>
-          {editIcon && <img className="edit-preview" src={editIcon} alt="Новый логотип" />}
+          <label className="field-label">Логотип сборки</label><IconPicker selected={editIconIndex} onSelect={index => { setEditIconIndex(index); setEditIcon(null); }} />
+          {(editIcon || editIconIndex !== null) && <img className="edit-preview" src={editIcon ?? avatarData(editIconIndex!)} alt="Новый логотип" />}
           <div className="detail-actions"><button className="primary" onClick={() => void saveEdit(instance)}>Сохранить</button><button className="outline" onClick={() => setEditingId(null)}>Отмена</button></div>
         </div> : <>
           <div className="detail-grid"><div><small>Версия игры</small><b>{instance.versionId}</b></div><div><small>Платформа</small><b>Java Edition</b></div><div><small>Загрузчик</small><b>Vanilla</b></div><div><small>Последний запуск</small><b>{dateLabel(instance.lastPlayedAt)}</b></div></div>
