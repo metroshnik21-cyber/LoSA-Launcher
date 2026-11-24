@@ -100,7 +100,7 @@ export default function App() {
       <div className="profile"><div className="avatar">{(offlineName || "Г").slice(0,1).toUpperCase()}</div><div className="profile-copy"><b>{offlineName || "Гость"}</b><span>Локальный Offline-профиль</span></div><ChevronDown size={15}/></div>
       <div className="nav-label">БИБЛИОТЕКА</div>
       <nav>{nav.map(({name,icon:Icon}) => <button key={name} className={page===name?"nav-item selected":"nav-item"} onClick={()=>setPage(name)}><Icon size={18}/><span>{name}</span>{name==="Друзья" && <i>0</i>}</button>)}</nav>
-      <div className="sidebar-bottom"><div className="status-dot"/> Offline-режим <span className="version">v0.9.2</span></div>
+      <div className="sidebar-bottom"><div className="status-dot"/> Offline-режим <span className="version">v0.10.0</span></div>
     </aside>
     <main className="main">
       <header className="topbar"><div className="crumb">L.o.S.A. <span>/</span> {page}</div><button className="icon-button" title="Справка" onClick={()=>setNotice("L.o.S.A. — ранняя версия лаунчера. Некоторые разделы пока являются демонстрационными.")}><CircleHelp size={18}/></button></header>
