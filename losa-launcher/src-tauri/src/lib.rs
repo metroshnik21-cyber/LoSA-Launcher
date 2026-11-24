@@ -226,6 +226,157 @@ fn logout_minecraft(auth_state: tauri::State<'_, std::sync::Mutex<Option<Minecra
 }
 
 
+
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct LauncherInstance {
+    id: String,
+    name: String,
+    version_id: String,
+    loader: String,
+    icon_data_url: Option<String>,
+    created_at: u64,
+    last_played_at: Option<u64>,
+}
+
+fn launcher_root() -> Result<std::path::PathBuf, String> {
+    let app_data = std::env::var_os("APPDATA").map(std::path::PathBuf::from)
+        .ok_or_else(|| "Не найдена папка APPDATA Windows.".to_string())?;
+    Ok(app_data.join("L-o-S-A"))
+}
+
+fn instances_file(root: &std::path::Path) -> std::path::PathBuf {
+    root.join("instances.json")
+}
+
+fn read_instances(root: &std::path::Path) -> Result<Vec<LauncherInstance>, String> {
+    let path = instances_file(root);
+    if !path.is_file() { return Ok(Vec::new()); }
+    let bytes = std::fs::read(path).map_err(|e| format!("Не удалось прочитать список сборок: {e}"))?;
+    serde_json::from_slice(&bytes).map_err(|e| format!("Список сборок повреждён: {e}"))
+}
+
+fn write_instances(root: &std::path::Path, instances: &[LauncherInstance]) -> Result<(), String> {
+    std::fs::create_dir_all(root).map_err(|e| format!("Не удалось подготовить папку LoSA: {e}"))?;
+    let bytes = serde_json::to_vec_pretty(instances).map_err(|e| format!("Не удалось сохранить список сборок: {e}"))?;
+    let path = instances_file(root);
+    let temp = root.join("instances.json.tmp");
+    std::fs::write(&temp, bytes).map_err(|e| format!("Не удалось записать список сборок: {e}"))?;
+    if path.exists() { std::fs::remove_file(&path).map_err(|e| format!("Не удалось обновить список сборок: {e}"))?; }
+    std::fs::rename(temp, path).map_err(|e| format!("Не удалось завершить сохранение сборок: {e}"))
+}
+
+fn valid_instance_id(id: &str) -> bool {
+    !id.is_empty() && id.len() <= 80 && id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+}
+
+#[tauri::command]
+fn list_instances() -> Result<Vec<LauncherInstance>, String> {
+    read_instances(&launcher_root()?)
+}
+
+#[tauri::command]
+fn create_instance(name: String, version_id: String, loader: String, icon_data_url: Option<String>) -> Result<LauncherInstance, String> {
+    let name = name.trim();
+    let version_id = version_id.trim();
+    if name.is_empty() || name.chars().count() > 40 {
+        return Err("Название сборки должно содержать от 1 до 40 символов.".into());
+    }
+    if version_id.is_empty() || !version_id.chars().next().is_some_and(|c| c.is_ascii_digit())
+        || !version_id.chars().all(|c| c.is_ascii_alphanumeric() || c == '.' || c == '-' || c == '_') {
+        return Err("Некорректная версия Minecraft.".into());
+    }
+    if loader != "vanilla" {
+        return Err("На этом этапе доступен только чистый Minecraft. Поддержку загрузчиков добавим отдельно.".into());
+    }
+    if let Some(icon) = icon_data_url.as_deref() {
+        if !icon.starts_with("data:image/") || icon.len() > 2_000_000 {
+            return Err("Логотип должен быть изображением размером не более 1,5 МБ.".into());
+        }
+    }
+    let root = launcher_root()?;
+    let mut instances = read_instances(&root)?;
+    let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default().as_secs();
+    let unique = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default().as_nanos();
+    let id = format!("instance-{unique}");
+    let instance = LauncherInstance {
+        id, name: name.to_string(), version_id: version_id.to_string(), loader,
+        icon_data_url, created_at: now, last_played_at: None,
+    };
+    // Preserve the previous launcher's shared worlds folder when creating the first real build.
+    if instances.is_empty() {
+        let legacy_game_dir = root.join("game");
+        let instance_game_dir = root.join("instances").join(&instance.id).join("game");
+        if legacy_game_dir.is_dir() && !instance_game_dir.exists() {
+            if let Some(parent) = instance_game_dir.parent() {
+                std::fs::create_dir_all(parent).map_err(|e| format!("Не удалось подготовить папку сборки: {e}"))?;
+            }
+            std::fs::rename(&legacy_game_dir, &instance_game_dir)
+                .map_err(|e| format!("Не удалось перенести существующие миры в новую сборку: {e}"))?;
+        }
+    }
+    instances.insert(0, instance.clone());
+    write_instances(&root, &instances)?;
+    Ok(instance)
+}
+
+#[tauri::command]
+fn update_instance(instance_id: String, name: String, icon_data_url: Option<String>) -> Result<LauncherInstance, String> {
+    if !valid_instance_id(&instance_id) { return Err("Некорректный идентификатор сборки.".into()); }
+    let name = name.trim();
+    if name.is_empty() || name.chars().count() > 40 {
+        return Err("Название сборки должно содержать от 1 до 40 символов.".into());
+    }
+    if let Some(icon) = icon_data_url.as_deref() {
+        if !icon.starts_with("data:image/") || icon.len() > 2_000_000 {
+            return Err("Логотип должен быть изображением размером не более 1,5 МБ.".into());
+        }
+    }
+    let root = launcher_root()?;
+    let mut instances = read_instances(&root)?;
+    let instance = instances.iter_mut().find(|item| item.id == instance_id)
+        .ok_or_else(|| "Сборка не найдена.".to_string())?;
+    instance.name = name.to_string();
+    if icon_data_url.is_some() { instance.icon_data_url = icon_data_url; }
+    let updated = instance.clone();
+    write_instances(&root, &instances)?;
+    Ok(updated)
+}
+
+#[tauri::command]
+fn delete_instance(instance_id: String) -> Result<(), String> {
+    if !valid_instance_id(&instance_id) { return Err("Некорректный идентификатор сборки.".into()); }
+    let root = launcher_root()?;
+    let mut instances = read_instances(&root)?;
+    let before = instances.len();
+    instances.retain(|instance| instance.id != instance_id);
+    if instances.len() == before { return Err("Сборка не найдена.".into()); }
+    write_instances(&root, &instances)
+}
+
+#[tauri::command]
+async fn prepare_instance(instance_id: String) -> Result<MinecraftInstallationStatus, String> {
+    if !valid_instance_id(&instance_id) { return Err("Некорректный идентификатор сборки.".into()); }
+    let root = launcher_root()?;
+    let instance = read_instances(&root)?.into_iter().find(|item| item.id == instance_id)
+        .ok_or_else(|| "Сборка не найдена.".to_string())?;
+    let current_status = get_minecraft_installation_status(instance.version_id.clone())?;
+    if current_status.installed_client.is_none() {
+        install_vanilla_client(instance.version_id.clone()).await?;
+    }
+    if current_status.dependency_report.is_none() {
+        install_minecraft_dependencies(instance.version_id.clone()).await?;
+    }
+    let metadata_path = root.join("versions").join(&instance.version_id).join(format!("{}.json", instance.version_id));
+    let metadata_bytes = std::fs::read(&metadata_path).map_err(|e| format!("Не удалось проверить метаданные версии: {e}"))?;
+    let metadata: serde_json::Value = serde_json::from_slice(&metadata_bytes).map_err(|e| format!("Метаданные Minecraft повреждены: {e}"))?;
+    let required_java = metadata.get("javaVersion").and_then(|v| v.get("majorVersion")).and_then(|v| v.as_u64()).map(|v| v as u32).unwrap_or(17);
+    ensure_java_runtime(required_java, &root).await?;
+    get_minecraft_installation_status(instance.version_id)
+}
+
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 struct InstalledClientInfo {
@@ -409,7 +560,7 @@ async fn install_minecraft_dependencies(version_id: String) -> Result<Dependency
         .map_err(|_| format!("Сначала установи клиент Minecraft {version_id}."))?;
     let metadata: serde_json::Value = serde_json::from_slice(&metadata_bytes)
         .map_err(|e| format!("Не удалось прочитать метаданные версии: {e}"))?;
-    let client = reqwest::Client::builder().user_agent("L.o.S.A. Launcher/0.9.1").build()
+    let client = reqwest::Client::builder().user_agent("L.o.S.A. Launcher/0.10.0").build()
         .map_err(|e| format!("Не удалось подготовить загрузчик: {e}"))?;
     let library_dir = root.join("libraries");
     let assets_dir = root.join("assets");
@@ -753,9 +904,19 @@ fn append_metadata_arguments(
     }
 }
 #[tauri::command]
-async fn launch_minecraft(version_id: String, auth_mode: String, offline_name: Option<String>, auth_state: tauri::State<'_, std::sync::Mutex<Option<MinecraftAuthSession>>>) -> Result<u32, String> {
-    let version_id = version_id.trim();
+async fn launch_minecraft(version_id: String, auth_mode: String, offline_name: Option<String>, instance_id: Option<String>, auth_state: tauri::State<'_, std::sync::Mutex<Option<MinecraftAuthSession>>>) -> Result<u32, String> {
+    let mut version_id = version_id.trim().to_string();
+    let mut instance_game_dir = None;
+    if let Some(id) = instance_id.as_deref() {
+        if !valid_instance_id(id) { return Err("Некорректный идентификатор сборки.".into()); }
+        let root = launcher_root()?;
+        let instance = read_instances(&root)?.into_iter().find(|item| item.id == id)
+            .ok_or_else(|| "Сборка не найдена.".to_string())?;
+        version_id = instance.version_id.clone();
+        instance_game_dir = Some(root.join("instances").join(id).join("game"));
+    }
     if version_id.is_empty() || !version_id.chars().next().is_some_and(|c| c.is_ascii_digit()) || !version_id.chars().all(|c| c.is_ascii_alphanumeric() || c == '.' || c == '-' || c == '_') { return Err("Некорректный идентификатор версии Minecraft.".into()); }
+    let version_id = version_id.as_str();
     let (profile, access_token, user_type) = match auth_mode.as_str() {
         "microsoft" => {
             let session = auth_state.lock().map_err(|_| "Не удалось проверить игровую сессию.".to_string())?.clone()
@@ -824,13 +985,13 @@ async fn launch_minecraft(version_id: String, auth_mode: String, offline_name: O
         }
     }
     classpath.push(client_jar.to_string_lossy().to_string());
-    let game_dir = root.join("game");
+    let game_dir = instance_game_dir.unwrap_or_else(|| root.join("game"));
     std::fs::create_dir_all(&game_dir).map_err(|e| format!("Не удалось создать игровую папку: {e}"))?;
     let assets_root = root.join("assets");
     let asset_index = metadata.get("assetIndex").and_then(|v| v.get("id")).and_then(|v| v.as_str()).unwrap_or(version_id);
     let mut values = std::collections::HashMap::new();
     values.insert("natives_directory".into(), natives_dir.to_string_lossy().to_string());
-    values.insert("launcher_name".into(), "L.o.S.A.".into()); values.insert("launcher_version".into(), "0.9.2".into());
+    values.insert("launcher_name".into(), "L.o.S.A.".into()); values.insert("launcher_version".into(), "0.10.0".into());
     values.insert("classpath".into(), classpath.join(if cfg!(windows) { ";" } else { ":" }));
     values.insert("classpath_separator".into(), if cfg!(windows) { ";".into() } else { ":".into() });
     values.insert("auth_player_name".into(), profile.name.clone()); values.insert("version_name".into(), version_id.to_string());
@@ -867,7 +1028,10 @@ async fn launch_minecraft(version_id: String, auth_mode: String, offline_name: O
     }
     let logs_dir = root.join("logs");
     std::fs::create_dir_all(&logs_dir).map_err(|e| format!("Не удалось создать папку журналов: {e}"))?;
-    let log_path = logs_dir.join(format!("minecraft-{version_id}-launch.log"));
+    let log_name = instance_id.as_deref()
+        .map(|id| format!("minecraft-{version_id}-{id}-launch.log"))
+        .unwrap_or_else(|| format!("minecraft-{version_id}-launch.log"));
+    let log_path = logs_dir.join(log_name);
     let log_file = std::fs::File::create(&log_path).map_err(|e| format!("Не удалось создать журнал запуска: {e}"))?;
     let stderr_file = log_file.try_clone().map_err(|e| format!("Не удалось подготовить журнал ошибок: {e}"))?;
     let mut command = std::process::Command::new(&java);
@@ -881,8 +1045,27 @@ async fn launch_minecraft(version_id: String, auth_mode: String, offline_name: O
         use std::os::windows::process::CommandExt;
         command.creation_flags(0x08000000); // CREATE_NO_WINDOW
     }
-    let child = command.spawn().map_err(|e| format!("Minecraft не удалось запустить через Java: {e}. Журнал: {}", log_path.display()))?;
-    Ok(child.id())
+    let mut child = command.spawn().map_err(|e| format!("Minecraft не удалось запустить через Java: {e}. Журнал: {}", log_path.display()))?;
+    let pid = child.id();
+    // Не сообщаем об успешном запуске, пока не убедились, что Java не завершилась мгновенно.
+    tokio::time::sleep(Duration::from_secs(2)).await;
+    if let Some(status) = child.try_wait().map_err(|e| format!("Не удалось проверить процесс Minecraft: {e}. Журнал: {}", log_path.display()))? {
+        let log_tail = std::fs::read_to_string(&log_path).unwrap_or_default()
+            .lines().rev().take(24).collect::<Vec<_>>().into_iter().rev().collect::<Vec<_>>().join("\n");
+        return Err(format!(
+            "Minecraft завершился во время запуска (код: {}). Журнал: {}\nПоследние строки:\n{}",
+            status, log_path.display(), if log_tail.is_empty() { "Журнал пуст.".to_string() } else { log_tail }
+        ));
+    }
+    if let Some(id) = instance_id.as_deref() {
+        if let Ok(mut instances) = read_instances(&root) {
+            if let Some(instance) = instances.iter_mut().find(|item| item.id == id) {
+                instance.last_played_at = Some(std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs());
+                let _ = write_instances(&root, &instances);
+            }
+        }
+    }
+    Ok(pid)
 }
 
 fn parse_java_major(output: &str) -> Option<u32> {
@@ -924,7 +1107,7 @@ fn detect_java() -> String {
 pub fn run() {
     tauri::Builder::default()
         .manage(std::sync::Mutex::new(None::<MinecraftAuthSession>))
-        .invoke_handler(tauri::generate_handler![detect_java, microsoft_auth_configured, start_microsoft_login, complete_microsoft_login, minecraft_auth_status, logout_minecraft, install_vanilla_client, install_minecraft_dependencies, get_minecraft_installation_status, launch_minecraft])
+        .invoke_handler(tauri::generate_handler![detect_java, microsoft_auth_configured, start_microsoft_login, complete_microsoft_login, minecraft_auth_status, logout_minecraft, list_instances, create_instance, update_instance, delete_instance, prepare_instance, install_vanilla_client, install_minecraft_dependencies, get_minecraft_installation_status, launch_minecraft])
         .run(tauri::generate_context!())
         .expect("error while running L.o.S.A.");
 }

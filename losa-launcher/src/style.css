@@ -7,3 +7,95 @@
 .install-panel{display:flex;justify-content:space-between;align-items:center;gap:16px;margin-top:14px;padding:14px 15px;background:#201f1a;border:1px solid #51482d;border-radius:9px}.install-panel b,.install-panel small{display:block}.install-panel b{font-size:11px;color:#e6d69e}.install-panel small{font-size:9px;color:#a39b83;margin-top:5px;overflow-wrap:anywhere}.install-panel .primary{white-space:nowrap;flex:none}.install-panel+.error{margin:8px 2px;color:#e58b83}.install-panel~.small{margin-top:8px}
 
 .offline-profile-card{margin-bottom:14px}.offline-profile-card .wide-input{margin-top:0}.offline-profile-card .primary{margin-top:8px}
+
+
+/* Milestone 0.10.0 — saved build collection */
+.build-list{display:grid;gap:11px;margin-top:16px}
+.build-card{background:#191c1e;border:1px solid #303537;border-radius:11px;overflow:hidden}
+.build-card-top{display:flex;align-items:center;gap:14px;padding:13px 15px;cursor:pointer;min-height:78px}
+.build-card-top:hover{background:#202426}
+.build-logo{width:48px;height:48px;flex:none;border-radius:9px;background:#2b2b25;color:#e4c96e;display:grid;place-items:center;font-size:20px;font-weight:800;overflow:hidden}
+.build-logo img{width:100%;height:100%;object-fit:cover}
+.build-summary{min-width:0;flex:1}
+.build-summary b,.build-summary small{display:block}
+.build-summary b{font-size:13px;color:#f0f1f1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.build-summary small{font-size:10px;color:#899296;margin-top:5px}
+.build-last-played{font-size:9px;color:#778084;white-space:nowrap}
+.build-play{padding:9px 13px;flex:none}
+.build-play:disabled{opacity:.65;cursor:wait}
+.build-chevron{color:#899296;transition:transform .18s;flex:none}
+.build-chevron.open{transform:rotate(180deg)}
+.build-details{padding:15px 17px 17px;border-top:1px solid #303537;background:#171a1b}
+.detail-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+.detail-grid small,.detail-grid b{display:block}
+.detail-grid small{font-size:9px;color:#7e878b;margin-bottom:5px}
+.detail-grid b{font-size:11px;color:#e3e6e6}
+.detail-actions{display:flex;gap:8px;margin-top:14px}
+.danger-action{color:#d99a91;border-color:#61413e}
+.add-build{margin-top:15px}
+.create-build-panel{margin-top:15px}
+.create-build-panel .settings-heading{margin-bottom:4px}
+.create-build-panel .wide-input{display:block}
+.create-submit{margin-top:16px}
+.file-picker{display:inline-flex;align-items:center;gap:8px;border:1px dashed #555d5e;border-radius:7px;padding:10px 13px;color:#cbd0d1;font-size:10px;cursor:pointer}
+.file-picker:hover{border-color:#bda85f;color:#ead27d}
+.file-picker input{display:none}
+.edit-preview{display:block;width:64px;height:64px;object-fit:cover;border-radius:9px;margin-top:10px;border:1px solid #454b4c}
+.edit-build label:not(.file-picker){display:block;color:#aeb5b7;font-size:10px;margin:8px 0}
+.edit-build input:not([type=file]){display:block;width:100%;margin-top:6px;background:#24292b;color:#e6e8e8;border:1px solid #3a4143;border-radius:6px;padding:10px;font:11px Inter}
+.home-quick{margin-top:22px}
+.spin{animation:losa-spin 1s linear infinite}
+@keyframes losa-spin{to{transform:rotate(360deg)}}
+.error-toast{border-color:#80504b;color:#f1c1ba}
+@media(max-width:900px){.build-last-played{display:none}.detail-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+
+
+/* 0.10.0 polish — softer motion, clearer spacing and logo selection */
+:root{--motion-fast:180ms;--motion-smooth:320ms;--motion-ease:cubic-bezier(.22,.68,0,1)}
+button,.outline,.primary,.quick-card,.nav-item,.settings-card,.build-card,.file-picker,.wide-input,.build-chevron{
+  transition:background-color var(--motion-fast) var(--motion-ease),border-color var(--motion-fast) var(--motion-ease),color var(--motion-fast) var(--motion-ease),box-shadow var(--motion-smooth) var(--motion-ease),transform var(--motion-smooth) var(--motion-ease),opacity var(--motion-smooth) var(--motion-ease)
+}
+.build-list{gap:15px}
+.build-card{transition:border-color var(--motion-smooth) var(--motion-ease),box-shadow var(--motion-smooth) var(--motion-ease)}
+.build-card-top{transition:background-color var(--motion-fast) var(--motion-ease)}
+.build-details{display:grid;grid-template-rows:minmax(0,0fr);padding:0 17px;border-top:0 solid transparent;opacity:0;transform:translateY(-7px);transition:grid-template-rows var(--motion-smooth) var(--motion-ease),padding var(--motion-smooth) var(--motion-ease),opacity var(--motion-smooth) var(--motion-ease),transform var(--motion-smooth) var(--motion-ease),border-width var(--motion-smooth) var(--motion-ease);overflow:hidden}
+.build-details>*{min-height:0;overflow:hidden}
+.build-details.expanded{grid-template-rows:minmax(0,1fr);padding:15px 17px 17px;border-top-width:1px;opacity:1;transform:translateY(0)}
+.build-chevron{transition:transform var(--motion-smooth) var(--motion-ease),color var(--motion-fast) var(--motion-ease)}
+.settings-card{margin-bottom:16px}
+.settings-card:last-child{margin-bottom:0}
+.settings-heading{padding-bottom:19px}
+.avatar-picker{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:11px;margin:10px 0 4px;max-width:560px}
+.avatar-option{aspect-ratio:1;min-width:0;padding:4px;border:1px solid #3a4143;border-radius:9px;background:#222628;cursor:pointer;display:grid;place-items:center}
+.avatar-option img{display:block;width:100%;height:100%;object-fit:cover;image-rendering:pixelated;border-radius:5px}
+.avatar-option:hover{transform:translateY(-2px);border-color:#9d8950;background:#2a2d2c}
+.avatar-option.selected{border:2px solid #d8bd64;background:#353124;box-shadow:0 0 0 2px #d8bd6430}
+@media(max-width:900px){.avatar-picker{gap:8px}}
+@media(prefers-reduced-motion:reduce){*,*::before,*::after{scroll-behavior:auto!important;transition-duration:.01ms!important;animation-duration:.01ms!important;animation-iteration-count:1!important}}
+
+/* Follow-up polish: distinct build emblems, complete expand animation and compact cards */
+.build-details{display:grid;grid-template-rows:minmax(0,0fr);padding:0 17px;border-top:0 solid transparent;opacity:0;transform:translateY(-9px);transition:grid-template-rows 360ms cubic-bezier(.2,.72,.18,1),padding 360ms cubic-bezier(.2,.72,.18,1),opacity 280ms ease,transform 360ms cubic-bezier(.2,.72,.18,1),border-width 360ms ease;overflow:hidden}
+.build-details-inner{min-height:0;overflow:hidden}
+.build-details.expanded{grid-template-rows:minmax(0,1fr);padding:15px 17px 16px;border-top-width:1px;opacity:1;transform:translateY(0)}
+.build-card-top{min-height:72px;padding:11px 14px}
+.build-card{height:auto;align-self:start}
+.build-logo img{image-rendering:pixelated}
+button:not(:disabled):hover,.outline:not(:disabled):hover,.primary:not(:disabled):hover{transform:translateY(-2px) scale(1.04);box-shadow:0 7px 20px #0003}
+button:active:not(:disabled),.outline:active:not(:disabled),.primary:active:not(:disabled){transform:translateY(0) scale(.985);transition-duration:90ms}
+button:focus-visible{outline:2px solid var(--accent,#d8bd64);outline-offset:3px}
+
+/* A collapsed grid track must have a zero minimum or it retains the hidden content height. */
+.build-details{grid-template-rows:minmax(0,0fr)}
+.build-details.expanded{grid-template-rows:minmax(0,1fr)}
+
+
+/* Startup screen — branded, minimal and indeterminate while app data loads */
+.startup-screen{position:fixed;inset:0;z-index:1000;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:22px;background:#101113;color:#eceef0;animation:startup-fade-in 260ms ease both}
+.startup-logo{width:116px;height:116px;object-fit:contain;border-radius:24px;animation:startup-logo-in 520ms cubic-bezier(.2,.72,.18,1) both}
+.startup-progress{width:min(220px,42vw);height:4px;border-radius:99px;background:#303436;overflow:hidden}
+.startup-progress span{display:block;width:38%;height:100%;border-radius:99px;background:var(--accent,#d8bd64);animation:startup-progress-move 1.25s ease-in-out infinite}
+.startup-screen p{margin:0;color:#929a9d;font-size:11px;letter-spacing:.2px}
+@keyframes startup-progress-move{0%{transform:translateX(-110%)}100%{transform:translateX(370%)}}
+@keyframes startup-logo-in{from{opacity:0;transform:translateY(8px) scale(.96)}to{opacity:1;transform:translateY(0) scale(1)}}
+@keyframes startup-fade-in{from{opacity:0}to{opacity:1}}
+@media(prefers-reduced-motion:reduce){.startup-screen,.startup-logo,.startup-progress span{animation:none!important}.startup-progress span{width:100%;opacity:.7}}
