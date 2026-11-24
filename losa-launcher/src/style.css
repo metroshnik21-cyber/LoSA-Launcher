@@ -80,7 +80,7 @@ button,.outline,.primary,.quick-card,.nav-item,.settings-card,.build-card,.file-
 .build-card-top{min-height:72px;padding:11px 14px}
 .build-card{height:auto;align-self:start}
 .build-logo img{image-rendering:pixelated}
-button:not(:disabled):hover,.outline:not(:disabled):hover,.primary:not(:disabled):hover{transform:translateY(-1px) scale(1.025);box-shadow:0 5px 16px #0003}
+button:not(:disabled):hover,.outline:not(:disabled):hover,.primary:not(:disabled):hover{transform:translateY(-2px) scale(1.04);box-shadow:0 7px 20px #0003}
 button:active:not(:disabled),.outline:active:not(:disabled),.primary:active:not(:disabled){transform:translateY(0) scale(.985);transition-duration:90ms}
 button:focus-visible{outline:2px solid var(--accent,#d8bd64);outline-offset:3px}
 
