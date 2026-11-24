@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type CSSProperties,  } from "react";
+import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import { Home, Gamepad2, Users, Layers3, Server, Settings, Plus, Play, ChevronDown, Sparkles, ShieldCheck, CircleHelp, Trash2, Pencil, X, LoaderCircle } from "lucide-react";
 import { getMinecraftVersions, type MinecraftVersion } from "./lib/minecraft";
 import { invoke } from "@tauri-apps/api/core";
