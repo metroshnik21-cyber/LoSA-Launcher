@@ -503,3 +503,29 @@ button:focus-visible{outline:2px solid var(--accent,#d8bd64);outline-offset:3px}
 .theme-light .bedrock-launch-panel p,.theme-light .bedrock-footnote{color:#65747a}
 @media(max-width:900px){.bedrock-simple .bedrock-banner{flex-wrap:wrap}.bedrock-simple .bedrock-refresh{margin-left:auto}}
 @media(max-width:640px){.bedrock-launch-panel{align-items:stretch;flex-direction:column}.bedrock-launch-button{width:100%}}
+
+/* L.o.S.A. 0.11.2 — public server directory and persistent friend-code entry */
+.server-toolbar-live{align-items:center}.server-search-button{flex:none;min-width:104px;justify-content:center}
+.server-filter-row{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:-3px 0 16px}
+.server-license-filter{display:flex;align-items:center;gap:9px;color:var(--muted,#899296);font-size:10px}
+.server-license-filter select{min-width:170px;padding:9px 11px;border:1px solid var(--line,#303537);border-radius:7px;background:var(--panel,#191c1e);color:var(--text,#eceef0);font:10px Inter}
+.server-directory-empty{min-height:125px;display:flex;align-items:center;justify-content:center;gap:10px;color:var(--muted,#899296);font-size:11px}
+.server-directory-error{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 14px;margin:10px 0;border:1px solid #a65a52;border-radius:9px;background:#fff2ef;color:#8b3e35;font-size:10px}
+.server-directory-attribution{font-size:9px;line-height:1.5;color:var(--muted,#899296);margin-top:13px}
+.server-address{margin-top:8px;font:9px ui-monospace,Consolas,monospace;color:var(--muted,#899296);overflow-wrap:anywhere}
+.friend-code-panel{margin:14px 0}.friend-code-form{display:flex;gap:10px;align-items:center;margin-top:14px}
+.friend-code-form .search-field{min-width:0}.friend-code-form .primary{white-space:nowrap}
+.friend-code-list{display:grid;gap:7px;margin-top:12px}
+.friend-code-item{display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--line,#303537);border-radius:8px;background:var(--surface,#202426)}
+.friend-code-item>span{font:600 10px ui-monospace,Consolas,monospace;color:var(--text,#eceef0)}
+.friend-code-item>small{margin-left:auto;color:var(--muted,#899296);font-size:9px}
+.friend-code-note{margin:11px 0 0;color:var(--muted,#899296);font-size:9px;line-height:1.55}
+.theme-light .server-license-filter select{background:#fff;border-color:#b8c4ca;color:#34464d}
+.theme-light .server-directory-error{background:#fff3f0;border-color:#e1b8b0;color:#8b3e35}
+.theme-light .friend-code-item{background:#f4f7f8;border-color:#c8d2d6}
+.theme-light .friend-code-item>span{color:#26353b}.theme-light .friend-code-item>small{color:#65747a}
+/* Remove blurred and radial decorative patches from the light theme. */
+.theme-light .hero::after,.theme-light .hero::before{display:none!important;filter:none!important;content:none!important}
+.theme-light .lobby-orbit,.theme-light .store-hero-gem,.theme-light .private-hero-icon,.theme-light .store-art{background:linear-gradient(135deg,#f7f9fa,#e7edf0)!important;filter:none!important;box-shadow:none!important}
+.theme-light .store-art span{text-shadow:none}.theme-light .hero-mark{box-shadow:0 8px 24px #26343a12}
+@media(max-width:760px){.server-filter-row{align-items:stretch;flex-direction:column}.server-license-filter{justify-content:space-between}.server-license-filter select{flex:1}.friend-code-form{align-items:stretch;flex-direction:column}.friend-code-form .primary{width:100%;justify-content:center}.friend-code-item{flex-wrap:wrap}.friend-code-item>small{margin-left:0;width:100%}}

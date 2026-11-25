@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type FormEvent } from "react";
 import { Home, Gamepad2, Users, Layers3, Server, Settings, Plus, Play, ChevronDown, Sparkles, ShieldCheck, CircleHelp, Trash2, Pencil, X, LoaderCircle, MessageCircle, Store, Crown, Search, Send, Heart, Globe, Shield, Cpu, HardDrive, ArrowUpRight } from "lucide-react";
 import { getMinecraftVersions, type MinecraftVersion } from "./lib/minecraft";
 import { invoke } from "@tauri-apps/api/core";
@@ -51,6 +51,52 @@ const dateLabel = (timestamp?: number | null) => timestamp
   ? new Date(timestamp * 1000).toLocaleString("ru-RU", { dateStyle: "medium", timeStyle: "short" })
   : "Ещё не запускалась";
 
+
+type PublicServer = {
+  id: string; name: string; address: string; port: number | null; edition: string;
+  version: string; playersOnline: number | null; playersMax: number | null;
+  description: string; authType: "online" | "offline" | "unknown"; tags: string[];
+};
+const readServerText = (value: unknown, keys: string[]): string => {
+  if (!value || typeof value !== "object") return "";
+  const record = value as Record<string, unknown>;
+  for (const key of keys) { const v=record[key]; if(typeof v==="string"&&v.trim())return v.trim(); if(typeof v==="number")return String(v); }
+  return "";
+};
+const readServerNumber = (value: unknown, keys: string[]): number | null => {
+  if (!value || typeof value !== "object") return null;
+  const record=value as Record<string,unknown>;
+  for(const key of keys){const v=record[key];if(typeof v==="number"&&Number.isFinite(v))return v;if(typeof v==="string"&&v.trim()&&Number.isFinite(Number(v)))return Number(v);}
+  return null;
+};
+const normalizePublicServers = (payload: unknown, license: string): PublicServer[] => {
+  const findRows=(value:unknown,depth=0):unknown[]=>{
+    if(Array.isArray(value))return value;
+    if(!value||typeof value!=="object"||depth>3)return [];
+    const record=value as Record<string,unknown>;
+    for(const key of ["servers","results","items","data"]){const rows=findRows(record[key],depth+1);if(rows.length)return rows;}
+    return [];
+  };
+  return findRows(payload).filter((item):item is Record<string,unknown>=>!!item&&typeof item==="object").map((item,index)=>{
+    const address=readServerText(item,["address","ip","host","server_ip","ip_address","hostname"]);
+    const players=item.players&&typeof item.players==="object"?item.players as Record<string,unknown>:{};
+    const rawAuth=readServerText(item,["auth_type","authType","authentication","mode"]).toLowerCase();
+    const authType:PublicServer["authType"]=/online|premium|licensed|license/.test(rawAuth)?"online":/offline|cracked|non.?premium/.test(rawAuth)?"offline":license==="required"?"online":license==="not_required"?"offline":"unknown";
+    const rawTags=item.tags??item.categories;
+    const rawEdition=readServerText(item,["edition","game","platform","type"]).toLowerCase();
+    const edition=/bedrock/.test(rawEdition)?"Bedrock":/cross/.test(rawEdition)?"Кроссплей":/java/.test(rawEdition)?"Java":"Minecraft";
+    return {
+      id:readServerText(item,["id","slug","server_id"])||address||"server-"+index,
+      name:readServerText(item,["name","server_name","title"])||address||"Minecraft server",
+      address,port:readServerNumber(item,["port"]),edition,
+      version:readServerText(item,["version","minecraft_version","game_version"])||"Версия не указана",
+      playersOnline:readServerNumber(item,["players_online","online_players","playersOnline"])??readServerNumber(players,["online","current"]),
+      playersMax:readServerNumber(item,["players_max","max_players","playersMax"])??readServerNumber(players,["max","capacity"]),
+      description:readServerText(item,["description","motd","tagline"]),
+      authType,tags:Array.isArray(rawTags)?rawTags.filter((tag):tag is string=>typeof tag==="string").slice(0,3):[]
+    };
+  }).filter(server=>!!server.address);
+};
 
 type ModrinthHit = { project_id: string; slug: string; title: string; description: string; author: string; downloads: number; icon_url?: string; categories: string[]; versions: string[]; project_type: string };
 
@@ -165,7 +211,15 @@ export default function App() {
   const [notice, setNotice] = useState("");
   const [serverQuery, setServerQuery] = useState("");
   const [serverEdition, setServerEdition] = useState<"Все" | "Java" | "Bedrock">("Все");
-  const [favoriteServers, setFavoriteServers] = useState<string[]>(["block-haven"]);
+  const [serverLicense, setServerLicense] = useState<"any" | "required" | "not_required">("any");
+  const [serverResults, setServerResults] = useState<PublicServer[]>([]);
+  const [serverLoading, setServerLoading] = useState(false);
+  const [serverError, setServerError] = useState("");
+  const [favoriteServers, setFavoriteServers] = useState<string[]>([]);
+  const [friendCodeDraft, setFriendCodeDraft] = useState("");
+  const [savedFriendCodes, setSavedFriendCodes] = useState<string[]>(() => {
+    try { return JSON.parse(localStorage.getItem("losa.friendCodes") ?? "[]") as string[]; } catch { return []; }
+  });
   const [chatChannel, setChatChannel] = useState("Общий");
   const [chatDraft, setChatDraft] = useState("");
   const [chatMessages, setChatMessages] = useState([
@@ -245,6 +299,37 @@ export default function App() {
     () => [...instances].sort((a, b) => (b.lastPlayedAt ?? b.createdAt) - (a.lastPlayedAt ?? a.createdAt)).slice(0, 5),
     [instances]
   );
+
+  const searchServers = async () => {
+    setServerLoading(true); setServerError("");
+    try {
+      const payload = await invoke<unknown>("search_public_servers", { query: serverQuery.trim(), edition: serverEdition, license: serverLicense });
+      setServerResults(normalizePublicServers(payload, serverLicense));
+    } catch (e) { setServerResults([]); setServerError(asMessage(e)); }
+    finally { setServerLoading(false); }
+  };
+
+  useEffect(() => {
+    if (page !== "Серверы") return;
+    const timer = window.setTimeout(() => { void searchServers(); }, serverQuery.trim() ? 450 : 0);
+    return () => window.clearTimeout(timer);
+  }, [page, serverQuery, serverEdition, serverLicense]);
+
+  const addFriendCode = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const code = friendCodeDraft.trim().toUpperCase();
+    if (!/^[A-Z0-9_-]{3,48}$/.test(code)) { setError("Код друга должен содержать 3–48 символов: латинские буквы, цифры, дефис или подчёркивание."); return; }
+    if (savedFriendCodes.includes(code)) { setError("Этот код уже есть в твоём списке."); return; }
+    const next = [...savedFriendCodes, code];
+    setSavedFriendCodes(next); localStorage.setItem("losa.friendCodes", JSON.stringify(next));
+    setFriendCodeDraft("");
+    setNotice("Код сохранён в списке. Проверка кода и отправка заявки станут доступны после подключения сервера аккаунтов L.o.S.A.");
+  };
+
+  const removeFriendCode = (code: string) => {
+    const next = savedFriendCodes.filter(item => item !== code);
+    setSavedFriendCodes(next); localStorage.setItem("losa.friendCodes", JSON.stringify(next));
+  };
 
   const refreshMicrosoftAccounts = async () => {
     const status = await invoke<{ accounts: { id: string; name: string }[]; activeProfileId: string | null }>("minecraft_auth_status");
@@ -483,15 +568,33 @@ export default function App() {
       </section>}
       {page === "Серверы" && <section className="content community-content">
         <div className="page-title"><div className="eyebrow"><Globe size={13}/> DISCOVER</div><h1>Список серверов</h1><p>Подбирай миры по стилю игры, версии и изданию Minecraft.</p></div>
-        <div className="server-toolbar"><div className="search-field"><Search size={16}/><input value={serverQuery} onChange={e=>setServerQuery(e.target.value)} placeholder="Название сервера или режим…"/></div><div className="filter-pills">{(["Все","Java","Bedrock"] as const).map(v=><button key={v} className={serverEdition===v?"active":""} onClick={()=>setServerEdition(v)}>{v}</button>)}</div></div>
-        <div className="server-feature"><div className="server-feature-art"><span>✦</span></div><div><span className="panel-kicker">ВЫБОР СООБЩЕСТВА</span><h2>Найди свой следующий мир</h2><p>Выживание, мини-игры, творчество и приключения — всё в одном месте.</p></div></div>
-        <div className="server-results-head"><b>Популярные серверы</b><span>Примеры карточек · не реальные подключения</span></div>
-        <div className="server-grid">{[
-          {id:"block-haven",name:"Block Haven",mode:"Выживание",edition:"Java",version:"1.21.x",players:"248 / 500",tag:"Экономика",color:"blue"},
-          {id:"pixel-garden",name:"Pixel Garden",mode:"Творчество",edition:"Java",version:"1.20.4",players:"86 / 200",tag:"Строительство",color:"green"},
-          {id:"bedrock-world",name:"Bedrock World",mode:"Приключения",edition:"Bedrock",version:"1.21.x",players:"132 / 300",tag:"Кроссплей",color:"purple"},
-          {id:"redstone-lab",name:"Redstone Lab",mode:"Технический",edition:"Java",version:"1.21.x",players:"41 / 120",tag:"Redstone",color:"orange"}
-        ].filter(s=>(serverEdition==="Все"||s.edition===serverEdition)&&((s.name+" "+s.mode+" "+s.tag).toLowerCase().includes(serverQuery.toLowerCase()))).map(s=><article className="server-card" key={s.id}><div className={"server-card-art "+s.color}><span>{s.name.slice(0,1)}</span><button title="В избранное" className={favoriteServers.includes(s.id)?"favorite active":"favorite"} onClick={()=>setFavoriteServers(old=>old.includes(s.id)?old.filter(x=>x!==s.id):[...old,s.id])}><Heart size={16} fill={favoriteServers.includes(s.id)?"currentColor":"none"}/></button></div><div className="server-card-body"><div className="server-tags"><span>{s.edition}</span><span>{s.tag}</span></div><h3>{s.name}</h3><p>{s.mode} · Minecraft {s.version}</p><div className="server-card-foot"><span><i/> {s.players} игроков</span><button className="outline" onClick={()=>setNotice("Карточка сервера демонстрационная. Подключение станет доступно после каталога серверов.")}>Подробнее</button></div></div></article>)}</div>
+        <form className="server-toolbar server-toolbar-live" onSubmit={e=>{e.preventDefault();void searchServers();}}>
+          <div className="search-field"><Search size={16}/><input value={serverQuery} onChange={e=>setServerQuery(e.target.value)} placeholder="Название, адрес или режим…" aria-label="Поиск серверов"/></div>
+          <button className="primary server-search-button" type="submit" disabled={serverLoading}>{serverLoading?<><LoaderCircle size={14} className="spin"/> Ищем…</>:<><Search size={14}/> Найти</>}</button>
+        </form>
+        <div className="server-filter-row">
+          <div className="filter-pills">{(["Все","Java","Bedrock"] as const).map(v=><button type="button" key={v} className={serverEdition===v?"active":""} onClick={()=>setServerEdition(v)}>{v}</button>)}</div>
+          <label className="server-license-filter">Лицензия<select value={serverLicense} onChange={e=>setServerLicense(e.target.value as typeof serverLicense)}>
+            <option value="any">Любая</option><option value="required">Требуется</option><option value="not_required">Не требуется</option>
+          </select></label>
+        </div>
+        <div className="server-feature"><div className="server-feature-art"><span>✦</span></div><div><span className="panel-kicker">ВЫБОР СООБЩЕСТВА</span><h2>Найди свой следующий мир</h2><p>Поиск по реальному каталогу Minecraft-серверов, изданию и типу авторизации.</p></div></div>
+        <div className="server-results-head"><b>Найденные серверы</b><span>{serverLoading?"Обновляем каталог…":serverResults.length+" результатов · каталог AnyServer.pro"}</span></div>
+        {serverError&&<div className="server-directory-error">{serverError}<button className="outline" type="button" onClick={()=>void searchServers()}>Повторить</button></div>}
+        {serverLoading&&serverResults.length===0?<div className="server-directory-empty"><LoaderCircle className="spin"/> Ищем серверы…</div>:serverResults.length===0?<div className="server-directory-empty">{serverError?"Не удалось загрузить каталог.":"Серверы не найдены. Измени запрос или фильтры."}</div>:<div className="server-grid">{serverResults.map(server=>{
+          const licenseLabel=server.authType==="online"?"Лицензия требуется":server.authType==="offline"?"Без лицензии":"Тип лицензии не указан";
+          const players=server.playersOnline===null?"Онлайн неизвестен":server.playersMax===null?server.playersOnline+" игроков":server.playersOnline+" / "+server.playersMax+" игроков";
+          const address=server.address+(server.port?":"+server.port:"");
+          return <article className="server-card" key={server.id}>
+            <div className="server-card-art blue"><span>{server.name.slice(0,1).toUpperCase()}</span><button title="В избранное" type="button" className={favoriteServers.includes(server.id)?"favorite active":"favorite"} onClick={()=>setFavoriteServers(old=>old.includes(server.id)?old.filter(x=>x!==server.id):[...old,server.id])}><Heart size={16} fill={favoriteServers.includes(server.id)?"currentColor":"none"}/></button></div>
+            <div className="server-card-body"><div className="server-tags"><span>{server.edition}</span><span>{licenseLabel}</span>{server.tags.map(tag=><span key={tag}>{tag}</span>)}</div>
+              <h3>{server.name}</h3><p>{server.description||"Публичный Minecraft-сервер"} · {server.version}</p>
+              <div className="server-card-foot"><span><i/> {players}</span><button className="outline" type="button" onClick={()=>setNotice("Адрес сервера: "+address)}>Адрес</button></div>
+              <div className="server-address">{address}</div>
+            </div>
+          </article>;
+        })}</div>}
+        <p className="server-directory-attribution">Каталог и фильтры предоставляются AnyServer.pro. Наличие сервера в каталоге не гарантирует его доступность в данный момент.</p>
         <div className="private-server-section"><div className="section-head"><div><h2>Приватные серверы</h2><p>Собственный мир — прямо во вкладке «Серверы»</p></div></div><div className="private-hero"><div><span className="panel-kicker">ТВОЙ МИР · ТВОИ ПРАВИЛА</span><h2>Сервер для своей компании</h2><p>Выбери объём ресурсов и создай отдельный мир для друзей.</p></div><div className="private-hero-icon"><Server size={48}/></div></div><div className="plan-grid"><article className="plan-card "><span className="plan-label">ПРИВАТНЫЙ МИР</span><h3>Mini</h3><p>2 ГБ RAM · До 5 игроков</p><div className="plan-spec"><span><Cpu/> 2 ГБ RAM</span><span><Users/> До 5 игроков</span><span><HardDrive/> NVMe-хранилище и резервные копии</span><span><Shield/> Закрытый доступ по приглашению</span></div><b className="plan-price">€2,99 / мес.</b><button className="outline" onClick={()=>setNotice("Тарифы пока демонстрационные. Реальный хостинг и оплата ещё не подключены.")}>Выбрать · скоро</button></article><article className="plan-card featured"><span className="plan-label">ПОПУЛЯРНЫЙ</span><h3>Friends</h3><p>4 ГБ RAM · До 10 игроков</p><div className="plan-spec"><span><Cpu/> 4 ГБ RAM</span><span><Users/> До 10 игроков</span><span><HardDrive/> NVMe-хранилище и резервные копии</span><span><Shield/> Закрытый доступ по приглашению</span></div><b className="plan-price">€5,99 / мес.</b><button className="primary" onClick={()=>setNotice("Тарифы пока демонстрационные. Реальный хостинг и оплата ещё не подключены.")}>Выбрать · скоро</button></article><article className="plan-card "><span className="plan-label">ПРИВАТНЫЙ МИР</span><h3>Community</h3><p>6 ГБ RAM · До 15 игроков</p><div className="plan-spec"><span><Cpu/> 6 ГБ RAM</span><span><Users/> До 15 игроков</span><span><HardDrive/> NVMe-хранилище и резервные копии</span><span><Shield/> Закрытый доступ по приглашению</span></div><b className="plan-price">€8,99 / мес.</b><button className="outline" onClick={()=>setNotice("Тарифы пока демонстрационные. Реальный хостинг и оплата ещё не подключены.")}>Выбрать · скоро</button></article><article className="plan-card "><span className="plan-label">ПРИВАТНЫЙ МИР</span><h3>Creator</h3><p>8 ГБ RAM · До 20 игроков</p><div className="plan-spec"><span><Cpu/> 8 ГБ RAM</span><span><Users/> До 20 игроков</span><span><HardDrive/> NVMe-хранилище и резервные копии</span><span><Shield/> Закрытый доступ по приглашению</span></div><b className="plan-price">€11,99 / мес.</b><button className="outline" onClick={()=>setNotice("Тарифы пока демонстрационные. Реальный хостинг и оплата ещё не подключены.")}>Выбрать · скоро</button></article><article className="plan-card "><span className="plan-label">ПРИВАТНЫЙ МИР</span><h3>Adventure</h3><p>12 ГБ RAM · До 30 игроков</p><div className="plan-spec"><span><Cpu/> 12 ГБ RAM</span><span><Users/> До 30 игроков</span><span><HardDrive/> NVMe-хранилище и резервные копии</span><span><Shield/> Закрытый доступ по приглашению</span></div><b className="plan-price">€17,99 / мес.</b><button className="outline" onClick={()=>setNotice("Тарифы пока демонстрационные. Реальный хостинг и оплата ещё не подключены.")}>Выбрать · скоро</button></article><article className="plan-card "><span className="plan-label">ПРИВАТНЫЙ МИР</span><h3>Legend</h3><p>16 ГБ RAM · До 40 игроков</p><div className="plan-spec"><span><Cpu/> 16 ГБ RAM</span><span><Users/> До 40 игроков</span><span><HardDrive/> NVMe-хранилище и резервные копии</span><span><Shield/> Закрытый доступ по приглашению</span></div><b className="plan-price">€23,99 / мес.</b><button className="outline" onClick={()=>setNotice("Тарифы пока демонстрационные. Реальный хостинг и оплата ещё не подключены.")}>Выбрать · скоро</button></article></div><div className="community-panel private-create" id="private-create"><div className="panel-heading"><div><b>Мои приватные серверы</b><small>Черновики конфигураций на этом устройстве</small></div><span className="coming">Демо</span></div><div className="private-create-row"><input value={privateServerName} onChange={e=>setPrivateServerName(e.target.value)} placeholder="Название будущего сервера" maxLength={32}/><button className="primary" disabled={!privateServerName.trim()} onClick={()=>{setPrivateServerDrafts(old=>[...old,privateServerName.trim()]);setPrivateServerName("");setNotice("Черновик сервера добавлен локально. Он ещё не запущен в сети.");}}><Plus size={15}/> Добавить черновик</button></div>{privateServerDrafts.map((name,i)=><div className="private-draft" key={i}><Server size={16}/><b>{name}</b><span>Черновик · не запущен</span></div>)}</div></div>
         <div className="prototype-note"><ShieldCheck size={16}/> Поиск, фильтр Java/Bedrock и избранное работают локально. Адреса и онлайн игроков пока демонстрационные.</div>
       </section>}
@@ -547,7 +650,15 @@ export default function App() {
         <div className="subscription-section"><div className="section-head"><div><h2>Подписки L.o.S.A.</h2><p>Косметика, титулы и оформление профиля</p></div></div><div className="plan-grid"><article className="plan-card"><span className="plan-label vip"><Crown size={12}/> VIP</span><h3>VIP</h3><p>Больше способов выразить свой стиль</p><div className="plan-spec"><span>Эксклюзивные косметические предметы</span><span>Набор титулов профиля</span><span>Особенная рамка профиля</span></div><b className="plan-price">€2,99 / мес.</b><button className="outline" onClick={()=>setNotice("Подписки пока концептуальные. Оплата и выдача предметов не подключены.")}>Скоро</button></article><article className="plan-card featured"><span className="plan-label vipplus"><Crown size={12}/> VIP+</span><h3>VIP+</h3><p>Расширенная косметическая коллекция</p><div className="plan-spec"><span>Все косметические наборы VIP</span><span>Дополнительные редкие титулы</span><span>Расширенная рамка и эффекты профиля</span></div><b className="plan-price">€5,99 / мес.</b><button className="primary" onClick={()=>setNotice("Подписки пока концептуальные. Оплата и выдача предметов не подключены.")}>Скоро</button></article></div></div>
         <div className="prototype-note"><ShieldCheck size={16}/> Витрина и категории готовы как интерфейс. Баланс, инвентарь и покупки пока отключены.</div>
       </section>}
-      {page === "Друзья" && <section className="content community-content"><div className="page-title"><div className="eyebrow"><Users size={13}/> COMMUNITY</div><h1>Друзья</h1><p>Твой круг игроков в L.o.S.A. — независимо от издания Minecraft.</p></div><div className="community-panel"><div className="panel-heading"><div><b>Найти игроков</b><small>Поиск по нику — пока демонстрационный</small></div></div><div className="search-field friend-search"><Search size={16}/><input value={friendQuery} onChange={e=>setFriendQuery(e.target.value)} placeholder="Введи игровой ник…"/></div><div className="friend-results">{[{name:"Alex",title:"Исследователь",status:"В сети"},{name:"Mira",title:"Хранитель миров",status:"Недавно была"},{name:"Jamie",title:"Мастер редстоуна",status:"В сети"}].filter(f=>f.name.toLowerCase().includes(friendQuery.toLowerCase())||f.title.toLowerCase().includes(friendQuery.toLowerCase())).map(f=><div className="friend-result" key={f.name}><span className="direct-avatar">{f.name[0]}</span><div><b>{f.name}</b><small>{f.title}</small></div><span className="friend-presence">{f.status}</span><button className="outline" onClick={()=>setNotice("Заявки в друзья заработают после подключения аккаунтов L.o.S.A.")}>Добавить</button></div>)}</div></div><div className="referral-panel community-panel"><div className="referral-top"><div><span className="panel-kicker">ПРИГЛАШАЙ ДРУЗЕЙ</span><h2>Твой код приглашения</h2><p>Делись кодом L.o.S.A. и собирай свою команду</p></div><div className="referral-icon"><Users size={30}/></div></div><div className="referral-code"><div><small>ЛИЧНЫЙ КОД</small><b>Появится после запуска аккаунтов</b></div><span className="coming">Скоро</span></div><div className="referral-progress"><div className="referral-progress-head"><b>Путь к модератору</b><strong>0 из 5 друзей</strong></div><div className="referral-track"><span style={{width:"0%"}}/></div><p>Когда пять приглашённых пользователей зарегистрируются по твоему коду и подтвердят аккаунты, система автоматически назначит тебе роль модератора.</p></div><div className="role-ladder"><div className="role-row owner"><span className="role-symbol"><Crown size={16}/></span><div><b>Владелец</b><small>Ты — создатель L.o.S.A. Полный контроль над проектом.</small></div><span className="role-tag">Ты</span></div><div className="role-row deputy"><span className="role-symbol"><ShieldCheck size={16}/></span><div><b>Заместитель владельца</b><small>Выше администратора. Назначается и снимается только лично владельцем.</small></div><span className="role-tag">Личное назначение</span></div><div className="role-row trusted"><span className="role-symbol"><ShieldCheck size={16}/></span><div><b>Доверенный админ</b><small>Назначается лично владельцем или заместителем владельца за особое доверие. Получает расширенные полномочия в рамках поручений.</small></div><span className="role-tag">Личное назначение</span></div><div className="role-row admin"><span className="role-symbol"><Shield size={16}/></span><div><b>Администратор</b><small>Управление сообществом и модерацией в пределах выданных прав.</small></div></div><div className="role-row moderator"><span className="role-symbol"><Users size={16}/></span><div><b>Модератор</b><small>Автоматически за пять подтверждённых приглашений. Помогает поддерживать порядок.</small></div><span className="role-tag">5 приглашений</span></div><div className="role-row member"><span className="role-symbol"><Users size={16}/></span><div><b>Игрок</b><small>Стандартная роль участника сообщества.</small></div></div></div><p className="referral-safety"><ShieldCheck size={14}/> Приглашения должны подтверждаться сервером: один аккаунт — один учёт, собственные и повторные регистрации не засчитываются. Роль нельзя выдать изменением локальных файлов.</p></div>\n<div className="prototype-note"><ShieldCheck size={16}/> Пока используется локальный Offline-профиль. Общие друзья появятся после запуска аккаунтов.</div></section>}
+      {page === "Друзья" && <section className="content community-content"><div className="page-title"><div className="eyebrow"><Users size={13}/> COMMUNITY</div><h1>Друзья</h1><p>Твой круг игроков в L.o.S.A. — независимо от издания Minecraft.</p></div><div className="community-panel"><div className="panel-heading"><div><b>Найти игроков</b><small>Поиск по нику — пока демонстрационный</small></div></div><div className="search-field friend-search"><Search size={16}/><input value={friendQuery} onChange={e=>setFriendQuery(e.target.value)} placeholder="Введи игровой ник…"/></div><div className="friend-results">{[{name:"Alex",title:"Исследователь",status:"В сети"},{name:"Mira",title:"Хранитель миров",status:"Недавно была"},{name:"Jamie",title:"Мастер редстоуна",status:"В сети"}].filter(f=>f.name.toLowerCase().includes(friendQuery.toLowerCase())||f.title.toLowerCase().includes(friendQuery.toLowerCase())).map(f=><div className="friend-result" key={f.name}><span className="direct-avatar">{f.name[0]}</span><div><b>{f.name}</b><small>{f.title}</small></div><span className="friend-presence">{f.status}</span><button className="outline" onClick={()=>setNotice("Заявки в друзья заработают после подключения аккаунтов L.o.S.A.")}>Добавить</button></div>)}</div></div><div className="community-panel friend-code-panel">
+  <div className="panel-heading"><div><b>Добавить друга по коду</b><small>Поле всегда доступно — можно вводить коды позже и добавлять нескольких друзей</small></div></div>
+  <form className="friend-code-form" onSubmit={addFriendCode}>
+    <div className="search-field"><Users size={16}/><input value={friendCodeDraft} onChange={e=>setFriendCodeDraft(e.target.value)} placeholder="Введи код друга L.o.S.A." maxLength={48} aria-label="Код друга"/></div>
+    <button className="primary" type="submit" disabled={!friendCodeDraft.trim()}>Добавить код</button>
+  </form>
+  {savedFriendCodes.length>0&&<div className="friend-code-list">{savedFriendCodes.map(code=><div className="friend-code-item" key={code}><span>{code}</span><small>Сохранён локально · ожидает подключения аккаунтов</small><button className="icon-button" type="button" title="Удалить код" onClick={()=>removeFriendCode(code)}><Trash2 size={14}/></button></div>)}</div>}
+  <p className="friend-code-note">Сейчас коды сохраняются на этом устройстве. Реальная проверка кода и отправка заявки требуют серверной системы аккаунтов L.o.S.A.; лаунчер не будет делать вид, что друг уже добавлен.</p>
+</div><div className="referral-panel community-panel"><div className="referral-top"><div><span className="panel-kicker">ПРИГЛАШАЙ ДРУЗЕЙ</span><h2>Твой код приглашения</h2><p>Делись кодом L.o.S.A. и собирай свою команду</p></div><div className="referral-icon"><Users size={30}/></div></div><div className="referral-code"><div><small>ЛИЧНЫЙ КОД</small><b>Появится после запуска аккаунтов</b></div><span className="coming">Скоро</span></div><div className="referral-progress"><div className="referral-progress-head"><b>Путь к модератору</b><strong>0 из 5 друзей</strong></div><div className="referral-track"><span style={{width:"0%"}}/></div><p>Когда пять приглашённых пользователей зарегистрируются по твоему коду и подтвердят аккаунты, система автоматически назначит тебе роль модератора.</p></div><div className="role-ladder"><div className="role-row owner"><span className="role-symbol"><Crown size={16}/></span><div><b>Владелец</b><small>Ты — создатель L.o.S.A. Полный контроль над проектом.</small></div><span className="role-tag">Ты</span></div><div className="role-row deputy"><span className="role-symbol"><ShieldCheck size={16}/></span><div><b>Заместитель владельца</b><small>Выше администратора. Назначается и снимается только лично владельцем.</small></div><span className="role-tag">Личное назначение</span></div><div className="role-row trusted"><span className="role-symbol"><ShieldCheck size={16}/></span><div><b>Доверенный админ</b><small>Назначается лично владельцем или заместителем владельца за особое доверие. Получает расширенные полномочия в рамках поручений.</small></div><span className="role-tag">Личное назначение</span></div><div className="role-row admin"><span className="role-symbol"><Shield size={16}/></span><div><b>Администратор</b><small>Управление сообществом и модерацией в пределах выданных прав.</small></div></div><div className="role-row moderator"><span className="role-symbol"><Users size={16}/></span><div><b>Модератор</b><small>Автоматически за пять подтверждённых приглашений. Помогает поддерживать порядок.</small></div><span className="role-tag">5 приглашений</span></div><div className="role-row member"><span className="role-symbol"><Users size={16}/></span><div><b>Игрок</b><small>Стандартная роль участника сообщества.</small></div></div></div><p className="referral-safety"><ShieldCheck size={14}/> Приглашения должны подтверждаться сервером: один аккаунт — один учёт, собственные и повторные регистрации не засчитываются. Роль нельзя выдать изменением локальных файлов.</p></div>\n<div className="prototype-note"><ShieldCheck size={16}/> Пока используется локальный Offline-профиль. Общие друзья появятся после запуска аккаунтов.</div></section>}
       {page === "Моды и сборки" && <ModsAndPacks />}
 
       {(error || notice) && <div className={error ? "toast error-toast" : "toast"} onClick={() => { setError(""); setNotice(""); }}>{error || notice}<button aria-label="Закрыть">×</button></div>}

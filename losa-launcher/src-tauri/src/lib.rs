@@ -1,4 +1,6 @@
 mod bedrock;
+mod server_directory;
+use server_directory::search_public_servers;
 use bedrock::{detect_bedrock_installation, list_bedrock_instances, create_bedrock_instance, delete_bedrock_instance, launch_bedrock};
 use serde::{Deserialize, Serialize};
 use sha1::Digest;
@@ -1223,7 +1225,7 @@ fn detect_java() -> String {
 pub fn run() {
     tauri::Builder::default()
         .manage(std::sync::Mutex::new(MinecraftAuthState::default()))
-        .invoke_handler(tauri::generate_handler![detect_bedrock_installation, list_bedrock_instances, create_bedrock_instance, delete_bedrock_instance, launch_bedrock, detect_java, microsoft_auth_configured, login_microsoft_browser, minecraft_auth_status, switch_minecraft_account, logout_minecraft, list_instances, create_instance, update_instance, delete_instance, prepare_instance, install_vanilla_client, install_minecraft_dependencies, get_minecraft_installation_status, launch_minecraft])
+        .invoke_handler(tauri::generate_handler![search_public_servers, detect_bedrock_installation, list_bedrock_instances, create_bedrock_instance, delete_bedrock_instance, launch_bedrock, detect_java, microsoft_auth_configured, login_microsoft_browser, minecraft_auth_status, switch_minecraft_account, logout_minecraft, list_instances, create_instance, update_instance, delete_instance, prepare_instance, install_vanilla_client, install_minecraft_dependencies, get_minecraft_installation_status, launch_minecraft])
         .run(tauri::generate_context!())
         .expect("error while running L.o.S.A.");
 }
