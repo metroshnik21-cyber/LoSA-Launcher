@@ -10,7 +10,7 @@
 
 
 /* Milestone 0.10.0 — saved build collection */
-.build-list{display:grid;gap:11px;margin-top:16px}
+.build-list{display:grid;gap:22px;margin-top:20px}
 .build-card{background:#191c1e;border:1px solid #303537;border-radius:11px;overflow:hidden}
 .build-card-top{display:flex;align-items:center;gap:14px;padding:13px 15px;cursor:pointer;min-height:78px}
 .build-card-top:hover{background:#202426}
@@ -125,7 +125,7 @@ button:focus-visible{outline:2px solid var(--accent,#d8bd64);outline-offset:3px}
 @keyframes profile-menu-in{from{opacity:0;transform:translateY(-5px)}to{opacity:1;transform:translateY(0)}}
 .accent-controls{display:flex;align-items:center;gap:12px;flex-wrap:wrap}.theme-options{display:flex;gap:8px;margin:0 0 4px}
 .theme-option{min-width:110px;border:1px solid #414749;border-radius:7px;background:#24292b;color:#cbd0d1;padding:10px 14px;font:600 10px Inter;cursor:pointer}
-.theme-option.active{border-color:var(--accent,#d8bd64);background:#353124;color:#f0df9e;box-shadow:0 0 0 2px color-mix(in srgb,var(--accent,#d8bd64) 18%,transparent)}
+.theme-option.active{border-color:var(--accent,#d8bd64);background:color-mix(in srgb,var(--accent,#d8bd64) 24%,#24292b);color:var(--accent,#d8bd64);box-shadow:0 0 0 2px color-mix(in srgb,var(--accent,#d8bd64) 24%,transparent)}
 .accent-input{width:38px;height:38px;flex:none;padding:4px;border:1px solid #bfc5c8;border-radius:50%;background:#e4e7e9;box-shadow:0 1px 3px #0002;cursor:pointer;overflow:hidden}
 .accent-input::-webkit-color-swatch-wrapper{padding:4px}
 .accent-input::-webkit-color-swatch{border:1px solid #aeb5b9;border-radius:50%}

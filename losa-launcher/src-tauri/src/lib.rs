@@ -235,11 +235,17 @@ async fn login_microsoft_browser(auth_state: tauri::State<'_, std::sync::Mutex<O
         .header("Accept", "application/json")
         .json(&serde_json::json!({"identityToken":format!("XBL3.0 x={};{}",user_hash,xsts_data.token)}))
         .send().await.map_err(|e| auth_error(format!("Ошибка Minecraft Services: {e}")))?;
-    if !minecraft.status().is_success() {
-        return Err(format!("Minecraft Services отклонил вход (HTTP {}). Проверь лицензию Minecraft Java и доступ к Minecraft Services.", minecraft.status()));
-    }
     let minecraft_status = minecraft.status();
     let minecraft_body = minecraft.text().await.map_err(|e| auth_error(format!("Не удалось получить тело ответа Minecraft Services: {e}")))?;
+    if !minecraft_status.is_success() {
+        let details: serde_json::Value = serde_json::from_str(&minecraft_body).unwrap_or(serde_json::Value::Null);
+        let service_error = details.get("error").and_then(|v| v.as_str()).unwrap_or("unknown_error");
+        let error_message = details.get("errorMessage").and_then(|v| v.as_str()).unwrap_or("");
+        let developer_message = details.get("developerMessage").and_then(|v| v.as_str()).unwrap_or("");
+        let path = details.get("path").and_then(|v| v.as_str()).unwrap_or("/authentication/login_with_xbox");
+        let detail = [error_message, developer_message].into_iter().filter(|v| !v.is_empty()).collect::<Vec<_>>().join(" ");
+        return Err(format!("Minecraft Services: HTTP {} ({service_error}) на {path}. {} Проверь право аккаунта запускать Minecraft Java и настройки Xbox-профиля.", minecraft_status, detail));
+    }
     let mc_token: MinecraftLoginResponse = decode_auth_json(&minecraft_body, "Minecraft Services login", minecraft_status)?;
     let profile = client.get("https://api.minecraftservices.com/minecraft/profile")
         .bearer_auth(mc_token.access_token.clone()).send().await
