@@ -268,7 +268,6 @@ export default function App() {
   const [offlineNameDraft, setOfflineNameDraft] = useState(() => localStorage.getItem("losa.offlineName") ?? "");
   const [microsoftProfile, setMicrosoftProfile] = useState<{ id: string; name: string } | null>(null);
   const [microsoftConfigured, setMicrosoftConfigured] = useState(false);
-  const [microsoftDevice, setMicrosoftDevice] = useState<{ deviceCode: string; userCode: string; verificationUri: string; message: string; interval: number; expiresIn: number } | null>(null);
   const [microsoftBusy, setMicrosoftBusy] = useState(false);
   const [instances, setInstances] = useState<LauncherInstance[]>([]);
   const [versions, setVersions] = useState<MinecraftVersion[]>([]);
@@ -377,22 +376,17 @@ export default function App() {
   }, []);
 
   const beginMicrosoftLogin = async () => {
-    setMicrosoftBusy(true); setError(""); setMicrosoftDevice(null);
+    setMicrosoftBusy(true); setError("");
     try {
-      const device = await invoke<{ deviceCode: string; userCode: string; verificationUri: string; message: string; interval: number; expiresIn: number }>("start_microsoft_login");
-      setMicrosoftDevice(device);
-      setNotice("Открой страницу Microsoft, введи код и подтверди вход. Не отправляй этот код другим людям.");
-      const profile = await invoke<{ id: string; name: string }>("complete_microsoft_login", {
-        deviceCode: device.deviceCode, interval: device.interval, expiresIn: device.expiresIn
-      });
-      setMicrosoftProfile(profile); setMicrosoftDevice(null);
-      setNotice("Вход Microsoft выполнен. Профиль Java: " + profile.name);
+      const profile = await invoke<{ id: string; name: string }>("login_microsoft_browser");
+      setMicrosoftProfile(profile);
+      setNotice("Вход Microsoft выполнен. Профиль Minecraft: " + profile.name);
     } catch (e) { setError(asMessage(e)); }
     finally { setMicrosoftBusy(false); }
   };
 
   const logoutMicrosoft = async () => {
-    try { await invoke("logout_minecraft"); setMicrosoftProfile(null); setMicrosoftDevice(null); setNotice("Сеанс Microsoft завершён."); }
+    try { await invoke("logout_minecraft"); setMicrosoftProfile(null); setNotice("Сеанс Microsoft завершён."); }
     catch (e) { setError(asMessage(e)); }
   };
 
@@ -565,8 +559,7 @@ export default function App() {
           <div className="settings-heading"><div className="quick-icon"><ShieldCheck /></div><div><b>Аккаунт Microsoft</b><small>Вход через официальный код Microsoft — пароль лаунчеру не передаётся</small></div><span className={microsoftProfile ? "connected" : "disconnected"}>{microsoftProfile ? "Подключён" : "Не подключён"}</span></div>
           {!microsoftConfigured && <p className="muted small">Microsoft-вход не настроен в сборке. Проверь Client ID в настройках сборки GitHub Actions.</p>}
           {microsoftProfile ? <><p className="muted small">Вошли как <b>{microsoftProfile.name}</b>. Этот профиль подтверждён для Minecraft Java.</p><button className="outline" onClick={() => void logoutMicrosoft()}>Выйти из Microsoft</button></> :
-            <><button className="primary" disabled={!microsoftConfigured || microsoftBusy} onClick={() => void beginMicrosoftLogin()}>{microsoftBusy ? "Ожидаем подтверждение Microsoft…" : "Войти через Microsoft"}</button>
-            {microsoftDevice && <div className="device-code-panel"><p>Перейди на <a href={microsoftDevice.verificationUri} target="_blank" rel="noreferrer">{microsoftDevice.verificationUri}</a> и введи код:</p><strong>{microsoftDevice.userCode}</strong><small>Оставь лаунчер открытым до завершения входа.</small></div>}</>}
+            <><button className="primary" disabled={!microsoftConfigured || microsoftBusy} onClick={() => void beginMicrosoftLogin()}>{microsoftBusy ? "Ожидаем вход в браузере…" : "Войти через Microsoft"}</button></>}
         </div>
         <div className="settings-card offline-profile-card"><div className="settings-heading"><div className="quick-icon"><Gamepad2 /></div><div><b>Локальный профиль (Offline)</b><small>Вход по игровому нику для локального тестирования</small></div><span className={offlineName ? "connected" : "disconnected"}>{offlineName ? "Активен" : "Не выбран"}</span></div><label className="field-label" htmlFor="offline-player-name">Игровой ник</label><input id="offline-player-name" className="wide-input" value={offlineNameDraft} onChange={e => setOfflineNameDraft(e.target.value)} maxLength={16} placeholder="Например, Steve_123" /><p className="muted small">От 3 до 16 символов: латинские буквы, цифры и подчёркивание.</p><button className="primary" onClick={saveOfflineProfile}>Сохранить локальный профиль</button></div>
       </section>}
