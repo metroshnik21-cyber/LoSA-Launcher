@@ -43,11 +43,18 @@ fn write_instances(instances: &[BedrockInstance]) -> Result<(), String> {
     let path = instances_path()?;
     let root = path.parent().ok_or_else(|| "Не удалось определить папку профилей.".to_string())?;
     std::fs::create_dir_all(root).map_err(|e| format!("Не удалось создать папку L.o.S.A.: {e}"))?;
-    let temp = root.join("bedrock-instances.json.tmp");
+    let temp = root.join(format!("bedrock-instances-{}.tmp", std::process::id()));
     let bytes = serde_json::to_vec_pretty(instances).map_err(|e| format!("Не удалось сохранить профили Bedrock: {e}"))?;
-    std::fs::write(&temp, bytes).map_err(|e| format!("Не удалось записать профили Bedrock: {e}"))?;
-    if path.exists() { std::fs::remove_file(&path).map_err(|e| format!("Не удалось обновить профили Bedrock: {e}"))?; }
-    std::fs::rename(temp, path).map_err(|e| format!("Не удалось завершить сохранение профилей: {e}"))
+    let mut file = std::fs::File::create(&temp).map_err(|e| format!("Не удалось создать временный файл профилей: {e}"))?;
+    use std::io::Write;
+    file.write_all(&bytes).map_err(|e| format!("Не удалось записать профили Bedrock: {e}"))?;
+    file.sync_all().map_err(|e| format!("Не удалось завершить запись профилей Bedrock: {e}"))?;
+    drop(file);
+    // Replace the previous file only after the new JSON is fully written.
+    std::fs::rename(&temp, &path).map_err(|e| {
+        let _ = std::fs::remove_file(&temp);
+        format!("Не удалось завершить сохранение профилей Bedrock: {e}")
+    })
 }
 
 #[cfg(target_os = "windows")]
@@ -169,16 +176,19 @@ pub fn launch_bedrock(instance_id: String) -> Result<(), String> {
         .ok_or_else(|| "Профиль Bedrock не найден.".to_string())?;
     #[cfg(target_os = "windows")]
     {
-        use std::os::windows::process::CommandExt;
+        use std::os::windows::ffi::OsStrExt;
+        use windows_sys::Win32::UI::Shell::ShellExecuteW;
         let app_id = detect_bedrock_application_id()?;
         let target = format!("shell:AppsFolder\\{app_id}");
-        let status = std::process::Command::new("explorer.exe")
-            .arg(target)
-            .creation_flags(0x08000000)
-            .status()
-            .map_err(|e| format!("Не удалось открыть Minecraft Bedrock: {e}"))?;
-        if !status.success() {
-            return Err("Windows не смогла передать запрос на запуск Minecraft Bedrock.".into());
+        let operation: Vec<u16> = std::ffi::OsStr::new("open").encode_wide().chain(std::iter::once(0)).collect();
+        let target_wide: Vec<u16> = std::ffi::OsStr::new(&target).encode_wide().chain(std::iter::once(0)).collect();
+        // Activate the packaged app through the Windows Shell without spawning explorer.exe.
+        let result = unsafe {
+            ShellExecuteW(std::ptr::null_mut(), operation.as_ptr(), target_wide.as_ptr(),
+                std::ptr::null(), std::ptr::null(), 1)
+        };
+        if (result as isize) <= 32 {
+            return Err(format!("Windows не смогла открыть Minecraft Bedrock через системную оболочку (код {}).", result as isize));
         }
         item.last_played_at = Some(std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs());
         write_instances(&instances)
