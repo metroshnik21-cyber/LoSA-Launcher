@@ -34,6 +34,7 @@ struct MicrosoftToken {
 
 #[derive(Deserialize)]
 struct XboxAuthResponse {
+    #[serde(rename = "Token")]
     token: String,
     #[serde(rename = "DisplayClaims")]
     display_claims: XboxDisplayClaims,
