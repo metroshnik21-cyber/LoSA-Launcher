@@ -43,6 +43,7 @@ on:
       - "feature/bedrock-runtime-0.10.19"
       - "feature/bedrock-runtime-0.10.20"
       - "feature/0.11.1"
+      - "feature/0.11.2"
     tags:
       - "v*"
 
