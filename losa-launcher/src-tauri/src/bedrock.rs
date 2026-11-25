@@ -76,6 +76,26 @@ fn detect_bedrock_package() -> Result<(String, String), String> {
     Err("Автоматическое обнаружение Minecraft Bedrock пока поддерживается только в Windows.".into())
 }
 
+#[cfg(target_os = "windows")]
+fn detect_bedrock_application_id() -> Result<String, String> {
+    use std::os::windows::process::CommandExt;
+    // Read the actual Application Id from the installed package manifest instead of
+    // assuming every Minecraft package exposes an application named "App".
+    let script = "$ErrorActionPreference = 'Stop'; $p = Get-AppxPackage -Name Microsoft.MinecraftUWP -ErrorAction SilentlyContinue | Select-Object -First 1; if ($null -eq $p) { exit 3 }; $m = Get-AppxPackageManifest -Package $p; $app = $m.SelectSingleNode(\"//*[local-name()='Applications']/*[local-name()='Application']\"); if ($null -eq $app) { exit 4 }; $id = $app.GetAttribute('Id'); if ([string]::IsNullOrWhiteSpace($id)) { exit 5 }; [Console]::OutputEncoding = [System.Text.Encoding]::UTF8; Write-Output ($p.PackageFamilyName + '!' + $id)";
+    let output = std::process::Command::new("powershell.exe")
+        .args(["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", script])
+        .creation_flags(0x08000000)
+        .output().map_err(|e| format!("Не удалось определить приложение Minecraft Bedrock: {e}"))?;
+    if !output.status.success() {
+        return Err("Не удалось определить идентификатор запуска Minecraft Bedrock в Windows. Проверь установку игры через Microsoft Store.".into());
+    }
+    let app_id = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    if !app_id.contains('!') || app_id.ends_with('!') || app_id.chars().any(char::is_control) {
+        return Err("Windows вернула некорректный идентификатор приложения Minecraft Bedrock.".into());
+    }
+    Ok(app_id)
+}
+
 #[tauri::command]
 pub fn detect_bedrock_installation() -> BedrockInstallInfo {
     match detect_bedrock_package() {
@@ -92,7 +112,7 @@ pub fn detect_bedrock_installation() -> BedrockInstallInfo {
                 worlds_path: worlds.map(|p| p.to_string_lossy().to_string()),
                 behavior_packs_path: behavior.map(|p| p.to_string_lossy().to_string()),
                 resource_packs_path: resources.map(|p| p.to_string_lossy().to_string()),
-                message: "Minecraft Bedrock обнаружен. Профили L.o.S.A. пока используют общие игровые данные установленной игры.".into(),
+                message: "Minecraft Bedrock обнаружен.".into(),
             }
         }
         Err(message) => BedrockInstallInfo {
@@ -143,22 +163,24 @@ pub fn delete_bedrock_instance(instance_id: String) -> Result<(), String> {
 }
 
 #[tauri::command]
-pub fn launch_bedrock(instance_id: String) -> Result<(), String> {
-    let mut instances = read_instances()?;
-    let item = instances.iter_mut().find(|item| item.id == instance_id)
-        .ok_or_else(|| "Профиль Bedrock не найден.".to_string())?;
-    let (family, _) = detect_bedrock_package()?;
+pub fn launch_bedrock() -> Result<(), String> {
     #[cfg(target_os = "windows")]
     {
         use std::os::windows::process::CommandExt;
-        let target = format!("shell:AppsFolder\\{family}!App");
-        let status = std::process::Command::new("explorer.exe").arg(target)
-            .creation_flags(0x08000000).status()
+        let app_id = detect_bedrock_application_id()?;
+        let target = format!("shell:AppsFolder\\{app_id}");
+        let status = std::process::Command::new("explorer.exe")
+            .arg(target)
+            .creation_flags(0x08000000)
+            .status()
             .map_err(|e| format!("Не удалось открыть Minecraft Bedrock: {e}"))?;
-        if !status.success() { return Err("Windows не смогла запустить Minecraft Bedrock.".into()); }
+        if !status.success() {
+            return Err("Windows не смогла передать запрос на запуск Minecraft Bedrock.".into());
+        }
+        Ok(())
     }
     #[cfg(not(target_os = "windows"))]
-    { let _ = family; return Err("Запуск Minecraft Bedrock из L.o.S.A. пока поддерживается только в Windows.".into()); }
-    item.last_played_at = Some(std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs());
-    write_instances(&instances)
+    {
+        Err("Запуск Minecraft Bedrock из L.o.S.A. пока поддерживается только в Windows.".into())
+    }
 }
