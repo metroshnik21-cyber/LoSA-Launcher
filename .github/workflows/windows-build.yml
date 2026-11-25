@@ -14,6 +14,7 @@ on:
       - "feature/community-polish-0.10.6"
       - "feature/bedrock-mods-workshop-0.10.8"
       - "feature/bedrock-runtime-0.10.10"
+      - "feature/bedrock-runtime-0.10.12"
       - "feature/cosmetic-3d-workshop-0.10.9"
   push:
     branches:
@@ -25,6 +26,7 @@ on:
       - "feature/referrals-and-roles-0.10.7"
       - "feature/bedrock-mods-workshop-0.10.8"
       - "feature/bedrock-runtime-0.10.10"
+      - "feature/bedrock-runtime-0.10.12"
     tags:
       - "v*"
 
