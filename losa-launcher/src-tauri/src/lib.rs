@@ -71,6 +71,17 @@ fn auth_error(message: impl Into<String>) -> String {
     message.into()
 }
 
+fn decode_auth_json<T: serde::de::DeserializeOwned>(
+    body: &str,
+    stage: &str,
+    status: reqwest::StatusCode,
+) -> Result<T, String> {
+    serde_json::from_str(body).map_err(|error| {
+        let excerpt: String = body.chars().take(700).collect();
+        format!("{stage}: не удалось разобрать ответ (HTTP {status}): {error}. Ответ сервера: {excerpt}")
+    })
+}
+
 fn is_valid_offline_name(name: &str) -> bool {
     (3..=16).contains(&name.len())
         && name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
@@ -183,7 +194,8 @@ async fn login_microsoft_browser(auth_state: tauri::State<'_, std::sync::Mutex<O
         ])
         .send().await.map_err(|e| auth_error(format!("Не удалось обменять код Microsoft: {e}")))?;
     let status = response.status();
-    let body: serde_json::Value = response.json().await.map_err(|e| auth_error(format!("Некорректный ответ Microsoft: {e}")))?;
+    let body_text = response.text().await.map_err(|e| auth_error(format!("Не удалось прочитать ответ Microsoft: {e}")))?;
+    let body: serde_json::Value = decode_auth_json(&body_text, "Microsoft OAuth", status)?;
     if !status.is_success() {
         let code = body.get("error").and_then(|v| v.as_str()).unwrap_or("oauth_error");
         let description = body.get("error_description").and_then(|v| v.as_str()).unwrap_or("Microsoft не сообщил подробности.");
@@ -200,8 +212,9 @@ async fn login_microsoft_browser(auth_state: tauri::State<'_, std::sync::Mutex<O
     if !xbox.status().is_success() {
         return Err(format!("Xbox Live не принял авторизацию (HTTP {}). Проверь Xbox-профиль.", xbox.status()));
     }
-    let xbox_data: XboxAuthResponse = xbox.json().await
-        .map_err(|e| auth_error(format!("Не удалось прочитать ответ Xbox Live: {e}")))?;
+    let xbox_status = xbox.status();
+    let xbox_body = xbox.text().await.map_err(|e| auth_error(format!("Не удалось получить тело ответа Xbox Live: {e}")))?;
+    let xbox_data: XboxAuthResponse = decode_auth_json(&xbox_body, "Xbox Live", xbox_status)?;
     let user_hash = xbox_data.display_claims.xui.first()
         .ok_or_else(|| "Xbox Live не вернул идентификатор пользователя.".to_string())?.uhs.clone();
     let xsts = client.post("https://xsts.auth.xboxlive.com/xsts/authorize")
@@ -214,8 +227,9 @@ async fn login_microsoft_browser(auth_state: tauri::State<'_, std::sync::Mutex<O
     if !xsts.status().is_success() {
         return Err(format!("Xbox XSTS отклонил вход (HTTP {}). Возможно, нужно настроить Xbox-профиль или семейные разрешения.", xsts.status()));
     }
-    let xsts_data: XboxAuthResponse = xsts.json().await
-        .map_err(|e| auth_error(format!("Не удалось прочитать ответ XSTS: {e}")))?;
+    let xsts_status = xsts.status();
+    let xsts_body = xsts.text().await.map_err(|e| auth_error(format!("Не удалось получить тело ответа XSTS: {e}")))?;
+    let xsts_data: XboxAuthResponse = decode_auth_json(&xsts_body, "Xbox XSTS", xsts_status)?;
     let minecraft = client.post("https://api.minecraftservices.com/authentication/login_with_xbox")
         .header("Accept", "application/json")
         .json(&serde_json::json!({"identityToken":format!("XBL3.0 x={};{}",user_hash,xsts_data.token)}))
@@ -223,16 +237,18 @@ async fn login_microsoft_browser(auth_state: tauri::State<'_, std::sync::Mutex<O
     if !minecraft.status().is_success() {
         return Err(format!("Minecraft Services отклонил вход (HTTP {}). Проверь лицензию Minecraft Java и доступ к Minecraft Services.", minecraft.status()));
     }
-    let mc_token: MinecraftLoginResponse = minecraft.json().await
-        .map_err(|e| auth_error(format!("Не удалось получить Minecraft-токен: {e}")))?;
+    let minecraft_status = minecraft.status();
+    let minecraft_body = minecraft.text().await.map_err(|e| auth_error(format!("Не удалось получить тело ответа Minecraft Services: {e}")))?;
+    let mc_token: MinecraftLoginResponse = decode_auth_json(&minecraft_body, "Minecraft Services login", minecraft_status)?;
     let profile = client.get("https://api.minecraftservices.com/minecraft/profile")
         .bearer_auth(mc_token.access_token.clone()).send().await
         .map_err(|e| auth_error(format!("Не удалось получить профиль Minecraft: {e}")))?;
     if !profile.status().is_success() {
         return Err(format!("Профиль Minecraft недоступен (HTTP {}). Возможно, у аккаунта нет профиля Java Edition.", profile.status()));
     }
-    let profile = profile.json::<MinecraftProfile>().await
-        .map_err(|e| auth_error(format!("Не удалось прочитать профиль Minecraft: {e}")))?;
+    let profile_status = profile.status();
+    let profile_body = profile.text().await.map_err(|e| auth_error(format!("Не удалось получить тело профиля Minecraft: {e}")))?;
+    let profile: MinecraftProfile = decode_auth_json(&profile_body, "Профиль Minecraft", profile_status)?;
     let session = MinecraftAuthSession { access_token: mc_token.access_token, profile: profile.clone() };
     *auth_state.lock().map_err(|_| "Не удалось сохранить текущую игровую сессию.".to_string())? = Some(session);
     Ok(profile)
