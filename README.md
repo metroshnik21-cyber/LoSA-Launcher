@@ -15,3 +15,9 @@ Windows 10/11 desktop launcher prototype, version 0.10.9.
 - 0.10.8 adds the live Modrinth catalogue for Java mods/modpacks and a separate Bedrock hub foundation.
 - Bedrock add-on installation and Java local mod installation remain separate follow-up workflows.
 - This draft is based on the 0.10.8 feature branch, does not change main, and must not be merged without the owner's approval.
+
+
+## Bedrock Edition (0.10.10)
+- Windows Bedrock package detection through the installed Microsoft Store app.
+- Separate L.o.S.A. Bedrock launch profiles and launch command for the installed game.
+- Current profiles share the installed Bedrock game's worlds, settings and add-ons; per-profile sandboxing and add-on import are not yet implemented.

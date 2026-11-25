@@ -4,6 +4,7 @@ import { getMinecraftVersions, type MinecraftVersion } from "./lib/minecraft";
 import { invoke } from "@tauri-apps/api/core";
 import { checkModCompatibility, type ModrinthVersionInfo } from "./lib/mod-compatibility";
 import { Cosmetic3DEditor } from "./components/Cosmetic3DEditor";
+import { BedrockManager } from "./components/BedrockManager";
 
 type Page = "Главная" | "Играть" | "Лобби" | "Друзья" | "Чат" | "Магазин" | "Мастерская" | "Моды и сборки" | "Серверы" | "Настройки";
 type LauncherInstance = {
@@ -180,8 +181,7 @@ function CosmeticWorkshop({ setNotice }: { setNotice: (message: string) => void 
 type ModrinthHit = { project_id: string; slug: string; title: string; description: string; author: string; downloads: number; icon_url?: string; categories: string[]; versions: string[]; project_type: string };
 
 function ModsAndPacks() {
-  const [section, setSection] = useState<"mods" | "packs" | "bedrock">("mods");
-  const [edition, setEdition] = useState<"Java" | "Bedrock">("Java");
+  const [section, setSection] = useState<"mods" | "packs">("mods");
   const [query, setQuery] = useState("");
   const [loader, setLoader] = useState("fabric");
   const [gameVersion, setGameVersion] = useState("1.21.4");
@@ -193,7 +193,6 @@ function ModsAndPacks() {
   const [versionLoading, setVersionLoading] = useState(false);
   const [compatibility, setCompatibility] = useState<ReturnType<typeof checkModCompatibility> | null>(null);
   const search = async () => {
-    if (edition === "Bedrock" || section === "bedrock") { setError("Каталог Bedrock-аддонов подключается отдельным источником. Java-моды Modrinth не смешиваются с Bedrock."); return; }
     setLoading(true); setError(""); setSelected(null);
     try {
       const type = section === "packs" ? "modpack" : "mod";
@@ -206,9 +205,9 @@ function ModsAndPacks() {
     } catch (e) { setError(e instanceof Error ? e.message : String(e)); }
     finally { setLoading(false); }
   };
-  useEffect(() => { void search(); }, [section, edition, gameVersion, loader]);
+  useEffect(() => { void search(); }, [section, gameVersion, loader]);
   useEffect(() => {
-    if (!selected || section === "bedrock") { setVersionInfo([]); setCompatibility(null); return; }
+    if (!selected) { setVersionInfo([]); setCompatibility(null); return; }
     let active = true;
     setVersionLoading(true);
     const params = new URLSearchParams({ game_versions: JSON.stringify([gameVersion]), loaders: JSON.stringify(loader === "any" ? [] : [loader]) });
@@ -228,13 +227,12 @@ function ModsAndPacks() {
   return <section className="content mods-content">
     <div className="page-title"><div className="eyebrow"><Layers3 size={13}/> L.o.S.A. MOD CENTER</div><h1>Моды и сборки</h1><p>Ищи отдельные моды и готовые наборы. Для каждого проекта можно проверить версию игры и загрузчик.</p></div>
     <div className="mods-switcher">
-      <button className={section === "mods" ? "active" : ""} onClick={() => { setSection("mods"); setEdition("Java"); }}>Моды</button>
-      <button className={section === "packs" ? "active" : ""} onClick={() => { setSection("packs"); setEdition("Java"); }}>Сборки</button>
-      <button className={section === "bedrock" ? "active" : ""} onClick={() => { setSection("bedrock"); setEdition("Bedrock"); }}>Bedrock</button>
+      <button className={section === "mods" ? "active" : ""} onClick={() => setSection("mods")}>Моды</button>
+      <button className={section === "packs" ? "active" : ""} onClick={() => setSection("packs")}>Сборки</button>
     </div>
-    {section !== "bedrock" ? <>
+    <>
       <div className="mods-filters">
-        <label>Издание<select value={edition} onChange={e => setEdition(e.target.value as "Java" | "Bedrock")}><option>Java</option><option>Bedrock</option></select></label>
+        
         <label>Версия Minecraft<select value={gameVersion} onChange={e => setGameVersion(e.target.value)}>{["1.21.11","1.21.10","1.21.9","1.21.8","1.21.7","1.21.6","1.21.5","1.21.4","1.21.3","1.21.1","1.20.6","1.20.4","1.20.1","1.19.4"].map(v => <option key={v}>{v}</option>)}</select></label>
         {section === "mods" && <label>Загрузчик<select value={loader} onChange={e => setLoader(e.target.value)}><option value="fabric">Fabric</option><option value="forge">Forge</option><option value="neoforge">NeoForge</option><option value="quilt">Quilt</option><option value="any">Любой</option></select></label>}
       </div>
@@ -253,11 +251,7 @@ function ModsAndPacks() {
         <p className="mods-footnote">Пока доступен поиск и просмотр каталога. Установка файла в выбранную сборку и автоматическая проверка зависимостей будут подключены следующим техническим шагом — кнопка установки не имитируется.</p>
       </div>}
       <p className="mods-footnote">Источник каталога: Modrinth API. Загрузка и установка отдельных файлов в папку сборки пока не включены.</p>
-    </> : <div className="bedrock-hub">
-      <div className="bedrock-banner"><div className="bedrock-mark">B</div><div><span className="panel-kicker">ОТДЕЛЬНОЕ ИЗДАНИЕ</span><h2>Bedrock Edition</h2><p>Аддоны, наборы ресурсов и миры будут управляться отдельно от Java-модов.</p></div></div>
-      <div className="bedrock-grid"><article><b>Аддоны</b><span>.mcaddon · .mcpack</span><small>Каталог и установка аддонов — следующий этап</small></article><article><b>Ресурспаки</b><span>Текстуры и звуки</span><small>Импорт и управление наборами ресурсов</small></article><article><b>Миры и шаблоны</b><span>.mcworld</span><small>Отдельная библиотека миров Bedrock</small></article><article><b>Совместимость</b><span>Bedrock build + зависимости</span><small>Проверку будет выполнять отдельный скрипт</small></article></div>
-      <div className="prototype-note"><ShieldCheck size={16}/> Bedrock не использует Java-загрузчики Fabric/Forge. Для него будут отдельные каталоги, форматы файлов и сценарии установки. Этот экран — начало отдельного Bedrock-раздела, не готовый установщик.</div>
-    </div>}
+    </>
   </section>;
 }
 
@@ -272,6 +266,9 @@ export default function App() {
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
   const [offlineName, setOfflineName] = useState(() => localStorage.getItem("losa.offlineName") ?? "");
   const [offlineNameDraft, setOfflineNameDraft] = useState(() => localStorage.getItem("losa.offlineName") ?? "");
+  const [microsoftProfile, setMicrosoftProfile] = useState<{ id: string; name: string } | null>(null);
+  const [microsoftConfigured, setMicrosoftConfigured] = useState(false);
+  const [microsoftBusy, setMicrosoftBusy] = useState(false);
   const [instances, setInstances] = useState<LauncherInstance[]>([]);
   const [versions, setVersions] = useState<MinecraftVersion[]>([]);
   const [selectedVersion, setSelectedVersion] = useState("1.21.4");
@@ -373,6 +370,26 @@ export default function App() {
     [instances]
   );
 
+  useEffect(() => {
+    void invoke<boolean>("microsoft_auth_configured").then(setMicrosoftConfigured).catch(() => setMicrosoftConfigured(false));
+    void invoke<{ id: string; name: string } | null>("minecraft_auth_status").then(setMicrosoftProfile).catch(() => setMicrosoftProfile(null));
+  }, []);
+
+  const beginMicrosoftLogin = async () => {
+    setMicrosoftBusy(true); setError("");
+    try {
+      const profile = await invoke<{ id: string; name: string }>("login_microsoft_browser");
+      setMicrosoftProfile(profile);
+      setNotice("Вход Microsoft выполнен. Профиль Minecraft: " + profile.name);
+    } catch (e) { setError(asMessage(e)); }
+    finally { setMicrosoftBusy(false); }
+  };
+
+  const logoutMicrosoft = async () => {
+    try { await invoke("logout_minecraft"); setMicrosoftProfile(null); setNotice("Сеанс Microsoft завершён."); }
+    catch (e) { setError(asMessage(e)); }
+  };
+
   const saveOfflineProfile = () => {
     const name = offlineNameDraft.trim();
     if (!/^[A-Za-z0-9_]{3,16}$/.test(name)) {
@@ -407,7 +424,7 @@ export default function App() {
   };
 
   const launchBuild = async (instance: LauncherInstance) => {
-    if (!/^[A-Za-z0-9_]{3,16}$/.test(offlineName)) {
+    if (!microsoftProfile && !/^[A-Za-z0-9_]{3,16}$/.test(offlineName)) {
       setNotice("Сначала создай локальный профиль в настройках.");
       setPage("Настройки");
       return;
@@ -415,7 +432,7 @@ export default function App() {
     setBusyId(instance.id); setError("");
     try {
       const launch = () => invoke<number>("launch_minecraft", {
-        versionId: instance.versionId, instanceId: instance.id, authMode: "offline", offlineName
+        versionId: instance.versionId, instanceId: instance.id, authMode: microsoftProfile ? "microsoft" : "offline", offlineName
       });
       let pid: number;
       try {
@@ -524,18 +541,26 @@ export default function App() {
         {showCreate ? <div className="settings-card create-build-panel">
           <div className="settings-heading"><div className="quick-icon"><Plus /></div><div><b>Новая сборка</b><small>Выбери название, логотип и версию — остальное сделает LoSA</small></div><button className="icon-button" onClick={() => setShowCreate(false)}><X size={18} /></button></div>
           <label className="field-label">Название сборки</label><input className="wide-input" value={newName} maxLength={40} onChange={e => setNewName(e.target.value)} placeholder="Например, Выживание с друзьями" />
-          <label className="field-label">Версия Minecraft</label><select className="wide-input" value={selectedVersion} onChange={e => setSelectedVersion(e.target.value)}>{versions.map(v => <option key={v.id} value={v.id}>{v.id}</option>)}</select>
-          <div className="build-options-grid"><div><label className="field-label">Издание Minecraft</label><select className="wide-input" value={selectedEdition} onChange={e=>setSelectedEdition(e.target.value)}><option value="Java Edition">Java Edition</option><option value="Bedrock Edition" disabled>Bedrock Edition — скоро</option></select></div><div><label className="field-label">Загрузчик</label><select className="wide-input" value={selectedLoader} onChange={e=>setSelectedLoader(e.target.value)}><option value="vanilla">Vanilla</option><option value="fabric" disabled>Fabric — скоро</option><option value="forge" disabled>Forge — скоро</option><option value="neoforge" disabled>NeoForge — скоро</option><option value="quilt" disabled>Quilt — скоро</option></select></div></div>
-          <label className="field-label">Логотип сборки</label><IconPicker selected={newIconIndex} onSelect={index => { setNewIconIndex(index); setNewIcon(null); }} />
-          {(newIcon || newIconIndex !== null) && <img className="edit-preview" src={newIcon ?? avatarData(newIconIndex!)} alt="Предпросмотр логотипа" />}
-          <p className="muted small">Сейчас создание работает для Java Edition и Vanilla. Bedrock и загрузчики Fabric, Forge, NeoForge и Quilt появятся после реализации их установщиков. Во время создания автоматически загружаются клиент, библиотеки, ресурсы и подходящая Java.</p>
-          <button className="primary create-submit" disabled={creating || versionsLoading || versions.length === 0} onClick={() => void createBuild()}>{creating ? <><LoaderCircle size={15} className="spin" /> Подготавливаем сборку…</> : "Создать сборку"}</button>
+          <div className="build-options-grid"><div><label className="field-label">Издание Minecraft</label><select className="wide-input" value={selectedEdition} onChange={e=>setSelectedEdition(e.target.value)}><option value="Java Edition">Java Edition</option><option value="Bedrock Edition">Bedrock Edition</option></select></div>{selectedEdition === "Java Edition" && <div><label className="field-label">Загрузчик</label><select className="wide-input" value={selectedLoader} onChange={e=>setSelectedLoader(e.target.value)}><option value="vanilla">Vanilla</option><option value="fabric" disabled>Fabric — скоро</option><option value="forge" disabled>Forge — скоро</option><option value="neoforge" disabled>NeoForge — скоро</option><option value="quilt" disabled>Quilt — скоро</option></select></div>}</div>
+          {selectedEdition === "Bedrock Edition" ? <BedrockManager /> : <>
+            <label className="field-label">Версия Minecraft</label><select className="wide-input" value={selectedVersion} onChange={e => setSelectedVersion(e.target.value)}>{versions.map(v => <option key={v.id} value={v.id}>{v.id}</option>)}</select>
+            <label className="field-label">Логотип сборки</label><IconPicker selected={newIconIndex} onSelect={index => { setNewIconIndex(index); setNewIcon(null); }} />
+            {(newIcon || newIconIndex !== null) && <img className="edit-preview" src={newIcon ?? avatarData(newIconIndex!)} alt="Предпросмотр логотипа" />}
+            <p className="muted small">Java Edition: клиент, библиотеки, ресурсы и подходящая Java подготавливаются автоматически.</p>
+            <button className="primary create-submit" disabled={creating || versionsLoading || versions.length === 0} onClick={() => void createBuild()}>{creating ? <><LoaderCircle size={15} className="spin" /> Подготавливаем сборку…</> : "Создать сборку"}</button>
+          </>}
         </div> : <button className="outline add-build" onClick={() => setShowCreate(true)}><Plus size={17} /> Создать сборку</button>}
         {loadingInstances && <p className="muted small">Загружаем сохранённые сборки…</p>}
       </section>}
       {page === "Настройки" && <section className="content narrow"><div className="page-title"><div className="eyebrow">АККАУНТ И ПРИЛОЖЕНИЕ</div><h1>Настройки</h1><p>Локальный профиль и внешний вид L.o.S.A.</p></div>
         <div className="settings-card appearance-card"><div className="settings-heading"><div className="quick-icon"><Sparkles /></div><div><b>Внешний вид лаунчера</b><small>Тема и акцентный цвет сохраняются автоматически</small></div></div><label className="field-label">Тема интерфейса</label><div className="theme-options"><button type="button" className={theme === "dark" ? "theme-option active" : "theme-option"} aria-pressed={theme === "dark"} onClick={() => setTheme("dark")}>Тёмная</button><button type="button" className={theme === "light" ? "theme-option active" : "theme-option"} aria-pressed={theme === "light"} onClick={() => setTheme("light")}>Светлая</button></div><label className="field-label" htmlFor="losa-accent-color">Акцентный цвет</label><div className="accent-controls"><div className="accent-presets" role="group" aria-label="Готовые акцентные цвета">{accentPresets.map(preset => <button key={preset.color} type="button" className={accentColor.toLowerCase() === preset.color ? "accent-swatch selected" : "accent-swatch"} style={{ "--swatch": preset.color } as CSSProperties} onClick={() => setAccentColor(preset.color)} aria-label={preset.name} aria-pressed={accentColor.toLowerCase() === preset.color} title={preset.name} />)}</div><input id="losa-accent-color" className="accent-input" type="color" value={accentColor} onChange={e => setAccentColor(e.target.value)} aria-label="Выбрать произвольный акцентный цвет" /><span className="muted small">Готовые оттенки или любой свой цвет.</span><button className="outline" onClick={() => setAccentColor("#d8bd64")}>Сбросить</button></div></div>
         <div className="settings-card language-card"><div className="settings-heading"><div className="quick-icon"><Globe/></div><div><b>Язык интерфейса</b><small>Выбор сохраняется в настройках</small></div></div><label className="field-label" htmlFor="losa-language">Язык</label><select id="losa-language" className="wide-input" value={selectedLanguage} onChange={e=>{setSelectedLanguage(e.target.value);setNotice("Языковое предпочтение сохранено. Полные переводы подключим отдельным этапом локализации.");}}><option value="ru">Русский</option><option value="en">English</option><option value="de">Deutsch</option><option value="fr">Français</option><option value="es">Español</option><option value="zh-CN">简体中文</option><option value="be">Беларуская</option><option value="kk">Қазақша</option><option value="pt-BR">Português (Brasil)</option></select><p className="muted small">Сейчас интерфейс ещё отображается на русском. Смена языка сохранит предпочтение, а переводы будут включены после подготовки языковых пакетов.</p></div>
+        <div className="settings-card offline-profile-card">
+          <div className="settings-heading"><div className="quick-icon"><ShieldCheck /></div><div><b>Аккаунт Microsoft</b><small>Вход через официальный код Microsoft — пароль лаунчеру не передаётся</small></div><span className={microsoftProfile ? "connected" : "disconnected"}>{microsoftProfile ? "Подключён" : "Не подключён"}</span></div>
+          {!microsoftConfigured && <p className="muted small">Microsoft-вход не настроен в сборке. Проверь Client ID в настройках сборки GitHub Actions.</p>}
+          {microsoftProfile ? <><p className="muted small">Вошли как <b>{microsoftProfile.name}</b>. Этот профиль подтверждён для Minecraft Java.</p><button className="outline" onClick={() => void logoutMicrosoft()}>Выйти из Microsoft</button></> :
+            <><button className="primary" disabled={!microsoftConfigured || microsoftBusy} onClick={() => void beginMicrosoftLogin()}>{microsoftBusy ? "Ожидаем вход в браузере…" : "Войти через Microsoft"}</button></>}
+        </div>
         <div className="settings-card offline-profile-card"><div className="settings-heading"><div className="quick-icon"><Gamepad2 /></div><div><b>Локальный профиль (Offline)</b><small>Вход по игровому нику для локального тестирования</small></div><span className={offlineName ? "connected" : "disconnected"}>{offlineName ? "Активен" : "Не выбран"}</span></div><label className="field-label" htmlFor="offline-player-name">Игровой ник</label><input id="offline-player-name" className="wide-input" value={offlineNameDraft} onChange={e => setOfflineNameDraft(e.target.value)} maxLength={16} placeholder="Например, Steve_123" /><p className="muted small">От 3 до 16 символов: латинские буквы, цифры и подчёркивание.</p><button className="primary" onClick={saveOfflineProfile}>Сохранить локальный профиль</button></div>
       </section>}
 
