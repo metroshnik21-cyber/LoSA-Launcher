@@ -32,6 +32,7 @@ on:
       - "feature/bedrock-runtime-0.10.12"
       - "feature/bedrock-runtime-0.10.14"
       - "feature/bedrock-runtime-0.10.15"
+      - "feature/bedrock-runtime-0.10.16"
     tags:
       - "v*"
 

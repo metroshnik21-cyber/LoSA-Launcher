@@ -423,6 +423,7 @@ button:focus-visible{outline:2px solid var(--accent,#d8bd64);outline-offset:3px}
 
 
 /* L.o.S.A. 0.10.10 — make the selected accent color drive legacy gold/orange text and primary highlights. */
+.app-shell .eyebrow,.app-shell .hero h1 em,.app-shell .tag,.app-shell .quick-icon,.app-shell .empty-icon,.app-shell .coming,.app-shell .runtime-panel>div,.app-shell .manifest-line button,.app-shell .device-box strong,.app-shell .device-box a,.app-shell .file-picker:hover,.app-shell .build-logo,.app-shell .build-preparation.preparing,.app-shell .lobby-orbit,.app-shell .lobby-actions button>svg:first-child,.app-shell .chat-channel.active svg,.app-shell .private-draft svg,.app-shell .friends-empty>svg,.app-shell .referral-icon,.app-shell .referral-safety svg,.app-shell .mods-switcher button.active,.app-shell .mod-card-head>span,.app-shell .bedrock-grid span,.app-shell .bedrock-paths svg,.app-shell .plan-spec svg,.app-shell .plan-label.vip,.app-shell .install-panel b{color:var(--accent)!important}
 .app-shell .primary{background:var(--accent);}
 .app-shell .primary:hover{filter:brightness(1.08)}
 .app-shell .nav-item.selected{box-shadow:inset 2px 0 var(--accent)}
