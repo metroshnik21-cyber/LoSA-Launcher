@@ -1,6 +1,6 @@
 [package]
 name = "losa-launcher"
-version = "0.11.2"
+version = "0.11.3"
 description = "L.o.S.A. launcher"
 authors = ["Spark_Anvil"]
 edition = "2021"
@@ -26,3 +26,6 @@ md5 = "0.7"
 futures-util = "0.3"
 tokio = { version = "1", features = ["time", "rt"] }
 zip = { version = "2", default-features = false, features = ["deflate"] }
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.59", features = ["Win32_Foundation", "Win32_UI_Shell"] }
