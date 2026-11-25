@@ -163,7 +163,10 @@ pub fn delete_bedrock_instance(instance_id: String) -> Result<(), String> {
 }
 
 #[tauri::command]
-pub fn launch_bedrock() -> Result<(), String> {
+pub fn launch_bedrock(instance_id: String) -> Result<(), String> {
+    let mut instances = read_instances()?;
+    let item = instances.iter_mut().find(|item| item.id == instance_id)
+        .ok_or_else(|| "Профиль Bedrock не найден.".to_string())?;
     #[cfg(target_os = "windows")]
     {
         use std::os::windows::process::CommandExt;
@@ -177,10 +180,12 @@ pub fn launch_bedrock() -> Result<(), String> {
         if !status.success() {
             return Err("Windows не смогла передать запрос на запуск Minecraft Bedrock.".into());
         }
-        Ok(())
+        item.last_played_at = Some(std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs());
+        write_instances(&instances)
     }
     #[cfg(not(target_os = "windows"))]
     {
+        let _ = item;
         Err("Запуск Minecraft Bedrock из L.o.S.A. пока поддерживается только в Windows.".into())
     }
 }

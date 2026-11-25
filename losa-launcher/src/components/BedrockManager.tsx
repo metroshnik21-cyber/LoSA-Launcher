@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { Gamepad2, RefreshCw, ShieldCheck, AlertCircle, Play, LoaderCircle } from "lucide-react";
+import { Gamepad2, RefreshCw, ShieldCheck, AlertCircle, Play, LoaderCircle, Plus, Trash2 } from "lucide-react";
 
 type BedrockInfo = {
   installed: boolean;
@@ -11,11 +11,16 @@ type BedrockInfo = {
   resourcePacksPath: string | null;
   message: string;
 };
+type BedrockProfile = { id: string; name: string; createdAt: number; lastPlayedAt: number | null };
 
-export function BedrockManager() {
+type Props = { profileName: string };
+
+export function BedrockManager({ profileName }: Props) {
   const [info, setInfo] = useState<BedrockInfo | null>(null);
+  const [profiles, setProfiles] = useState<BedrockProfile[]>([]);
   const [checking, setChecking] = useState(true);
-  const [launching, setLaunching] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const [launchingId, setLaunchingId] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
 
@@ -23,8 +28,12 @@ export function BedrockManager() {
     setChecking(true);
     setError("");
     try {
-      const status = await invoke<BedrockInfo>("detect_bedrock_installation");
+      const [status, saved] = await Promise.all([
+        invoke<BedrockInfo>("detect_bedrock_installation"),
+        invoke<BedrockProfile[]>("list_bedrock_instances")
+      ]);
       setInfo(status);
+      setProfiles(saved);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -34,18 +43,47 @@ export function BedrockManager() {
 
   useEffect(() => { void refresh(); }, []);
 
-  const launch = async () => {
-    setLaunching(true);
+  const create = async () => {
+    const cleanName = profileName.trim();
+    if (!cleanName) {
+      setError("Сначала укажи название профиля в поле выше.");
+      return;
+    }
+    setCreating(true);
     setError("");
     setNotice("");
     try {
-      await invoke("launch_bedrock");
+      const item = await invoke<BedrockProfile>("create_bedrock_instance", { name: cleanName });
+      setProfiles(current => [item, ...current]);
+      setNotice("Профиль Bedrock создан. Миры и игровые данные остаются в официальной установке Minecraft.");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  const launch = async (profile: BedrockProfile) => {
+    setLaunchingId(profile.id);
+    setError("");
+    setNotice("");
+    try {
+      await invoke("launch_bedrock", { instanceId: profile.id });
+      setProfiles(current => current.map(item => item.id === profile.id ? { ...item, lastPlayedAt: Math.floor(Date.now() / 1000) } : item));
       setNotice("Запрос на запуск Minecraft Bedrock отправлен Windows.");
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
-      setLaunching(false);
-      await refresh();
+      setLaunchingId(null);
+    }
+  };
+
+  const remove = async (profile: BedrockProfile) => {
+    try {
+      await invoke("delete_bedrock_instance", { instanceId: profile.id });
+      setProfiles(current => current.filter(item => item.id !== profile.id));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
     }
   };
 
@@ -55,9 +93,9 @@ export function BedrockManager() {
       <div className="bedrock-banner-copy">
         <span className="panel-kicker">ИЗДАНИЕ MINECRAFT</span>
         <h2>Bedrock Edition</h2>
-        <p>Запуск установленной игры прямо из L.o.S.A.</p>
+        <p>Понятный запуск официальной игры через L.o.S.A.</p>
       </div>
-      <button className="outline bedrock-refresh" onClick={() => void refresh()} disabled={checking || launching} title="Проверить установку">
+      <button className="outline bedrock-refresh" onClick={() => void refresh()} disabled={checking || creating || launchingId !== null} title="Проверить установку">
         <RefreshCw size={14}/> Проверить
       </button>
     </div>
@@ -72,15 +110,27 @@ export function BedrockManager() {
 
     <div className="bedrock-launch-panel">
       <div>
-        <b>Готов к игре?</b>
-        <p>{info?.installed ? "L.o.S.A. откроет установленный Minecraft Bedrock." : "Установи Minecraft Bedrock через Microsoft Store, затем нажми «Проверить»."}</p>
+        <b>Новый профиль</b>
+        <p>Использует установленную игру и её миры. Название берётся из поля «Название сборки» выше.</p>
       </div>
-      <button className="primary bedrock-launch-button" disabled={!info?.installed || checking || launching} onClick={() => void launch()}>
-        {launching ? <><LoaderCircle size={15} className="spin"/> Запускаем…</> : <><Play size={15}/> Играть</>}
+      <button className="primary bedrock-launch-button" disabled={!info?.installed || checking || creating || !profileName.trim()} onClick={() => void create()}>
+        {creating ? <><LoaderCircle size={15} className="spin"/> Создаём…</> : <><Plus size={15}/> Создать профиль</>}
       </button>
     </div>
 
-    <p className="bedrock-footnote">L.o.S.A. не скачивает и не подменяет файлы игры: используется твоя официальная установка Minecraft Bedrock.</p>
+    <div className="community-panel bedrock-profiles">
+      <div className="panel-heading"><div><b>Профили Bedrock</b><small>Выбери профиль и нажми «Играть»</small></div><span className="bedrock-count">{profiles.length}</span></div>
+      {profiles.length === 0 ? <p className="bedrock-empty">Пока нет профилей. Введи название выше и создай первый.</p> : <div className="bedrock-profile-list">{profiles.map(profile => <div className="bedrock-profile" key={profile.id}>
+        <div className="bedrock-profile-icon"><Gamepad2 size={18}/></div>
+        <div className="bedrock-profile-copy"><b>{profile.name}</b><small>Bedrock · {profile.lastPlayedAt ? "последний запуск " + new Date(profile.lastPlayedAt * 1000).toLocaleDateString("ru-RU") : "ещё не запускался"}</small></div>
+        <button className="primary" disabled={!info?.installed || checking || launchingId !== null} onClick={() => void launch(profile)}>
+          {launchingId === profile.id ? <><LoaderCircle size={14} className="spin"/> Запуск…</> : <><Play size={14}/> Играть</>}
+        </button>
+        <button className="icon-button" title="Удалить профиль" onClick={() => void remove(profile)}><Trash2 size={15}/></button>
+      </div>)}</div>}
+    </div>
+
+    <p className="bedrock-footnote">L.o.S.A. использует твою официальную установку Minecraft Bedrock и не скачивает игровые файлы.</p>
     {error && <div className="bedrock-message error">{error}</div>}
     {notice && <div className="bedrock-message">{notice}</div>}
   </section>;
