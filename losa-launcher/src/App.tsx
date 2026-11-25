@@ -266,6 +266,10 @@ export default function App() {
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
   const [offlineName, setOfflineName] = useState(() => localStorage.getItem("losa.offlineName") ?? "");
   const [offlineNameDraft, setOfflineNameDraft] = useState(() => localStorage.getItem("losa.offlineName") ?? "");
+  const [microsoftProfile, setMicrosoftProfile] = useState<{ id: string; name: string } | null>(null);
+  const [microsoftConfigured, setMicrosoftConfigured] = useState(false);
+  const [microsoftDevice, setMicrosoftDevice] = useState<{ deviceCode: string; userCode: string; verificationUri: string; message: string; interval: number; expiresIn: number } | null>(null);
+  const [microsoftBusy, setMicrosoftBusy] = useState(false);
   const [instances, setInstances] = useState<LauncherInstance[]>([]);
   const [versions, setVersions] = useState<MinecraftVersion[]>([]);
   const [selectedVersion, setSelectedVersion] = useState("1.21.4");
@@ -367,6 +371,31 @@ export default function App() {
     [instances]
   );
 
+  useEffect(() => {
+    void invoke<boolean>("microsoft_auth_configured").then(setMicrosoftConfigured).catch(() => setMicrosoftConfigured(false));
+    void invoke<{ id: string; name: string } | null>("minecraft_auth_status").then(setMicrosoftProfile).catch(() => setMicrosoftProfile(null));
+  }, []);
+
+  const beginMicrosoftLogin = async () => {
+    setMicrosoftBusy(true); setError(""); setMicrosoftDevice(null);
+    try {
+      const device = await invoke<{ deviceCode: string; userCode: string; verificationUri: string; message: string; interval: number; expiresIn: number }>("start_microsoft_login");
+      setMicrosoftDevice(device);
+      setNotice("Открой страницу Microsoft, введи код и подтверди вход. Не отправляй этот код другим людям.");
+      const profile = await invoke<{ id: string; name: string }>("complete_microsoft_login", {
+        deviceCode: device.deviceCode, interval: device.interval, expiresIn: device.expiresIn
+      });
+      setMicrosoftProfile(profile); setMicrosoftDevice(null);
+      setNotice("Вход Microsoft выполнен. Профиль Java: " + profile.name);
+    } catch (e) { setError(asMessage(e)); }
+    finally { setMicrosoftBusy(false); }
+  };
+
+  const logoutMicrosoft = async () => {
+    try { await invoke("logout_minecraft"); setMicrosoftProfile(null); setMicrosoftDevice(null); setNotice("Сеанс Microsoft завершён."); }
+    catch (e) { setError(asMessage(e)); }
+  };
+
   const saveOfflineProfile = () => {
     const name = offlineNameDraft.trim();
     if (!/^[A-Za-z0-9_]{3,16}$/.test(name)) {
@@ -401,7 +430,7 @@ export default function App() {
   };
 
   const launchBuild = async (instance: LauncherInstance) => {
-    if (!/^[A-Za-z0-9_]{3,16}$/.test(offlineName)) {
+    if (!microsoftProfile && !/^[A-Za-z0-9_]{3,16}$/.test(offlineName)) {
       setNotice("Сначала создай локальный профиль в настройках.");
       setPage("Настройки");
       return;
@@ -409,7 +438,7 @@ export default function App() {
     setBusyId(instance.id); setError("");
     try {
       const launch = () => invoke<number>("launch_minecraft", {
-        versionId: instance.versionId, instanceId: instance.id, authMode: "offline", offlineName
+        versionId: instance.versionId, instanceId: instance.id, authMode: microsoftProfile ? "microsoft" : "offline", offlineName
       });
       let pid: number;
       try {
@@ -532,6 +561,13 @@ export default function App() {
       {page === "Настройки" && <section className="content narrow"><div className="page-title"><div className="eyebrow">АККАУНТ И ПРИЛОЖЕНИЕ</div><h1>Настройки</h1><p>Локальный профиль и внешний вид L.o.S.A.</p></div>
         <div className="settings-card appearance-card"><div className="settings-heading"><div className="quick-icon"><Sparkles /></div><div><b>Внешний вид лаунчера</b><small>Тема и акцентный цвет сохраняются автоматически</small></div></div><label className="field-label">Тема интерфейса</label><div className="theme-options"><button type="button" className={theme === "dark" ? "theme-option active" : "theme-option"} aria-pressed={theme === "dark"} onClick={() => setTheme("dark")}>Тёмная</button><button type="button" className={theme === "light" ? "theme-option active" : "theme-option"} aria-pressed={theme === "light"} onClick={() => setTheme("light")}>Светлая</button></div><label className="field-label" htmlFor="losa-accent-color">Акцентный цвет</label><div className="accent-controls"><div className="accent-presets" role="group" aria-label="Готовые акцентные цвета">{accentPresets.map(preset => <button key={preset.color} type="button" className={accentColor.toLowerCase() === preset.color ? "accent-swatch selected" : "accent-swatch"} style={{ "--swatch": preset.color } as CSSProperties} onClick={() => setAccentColor(preset.color)} aria-label={preset.name} aria-pressed={accentColor.toLowerCase() === preset.color} title={preset.name} />)}</div><input id="losa-accent-color" className="accent-input" type="color" value={accentColor} onChange={e => setAccentColor(e.target.value)} aria-label="Выбрать произвольный акцентный цвет" /><span className="muted small">Готовые оттенки или любой свой цвет.</span><button className="outline" onClick={() => setAccentColor("#d8bd64")}>Сбросить</button></div></div>
         <div className="settings-card language-card"><div className="settings-heading"><div className="quick-icon"><Globe/></div><div><b>Язык интерфейса</b><small>Выбор сохраняется в настройках</small></div></div><label className="field-label" htmlFor="losa-language">Язык</label><select id="losa-language" className="wide-input" value={selectedLanguage} onChange={e=>{setSelectedLanguage(e.target.value);setNotice("Языковое предпочтение сохранено. Полные переводы подключим отдельным этапом локализации.");}}><option value="ru">Русский</option><option value="en">English</option><option value="de">Deutsch</option><option value="fr">Français</option><option value="es">Español</option><option value="zh-CN">简体中文</option><option value="be">Беларуская</option><option value="kk">Қазақша</option><option value="pt-BR">Português (Brasil)</option></select><p className="muted small">Сейчас интерфейс ещё отображается на русском. Смена языка сохранит предпочтение, а переводы будут включены после подготовки языковых пакетов.</p></div>
+        <div className="settings-card offline-profile-card">
+          <div className="settings-heading"><div className="quick-icon"><ShieldCheck /></div><div><b>Аккаунт Microsoft</b><small>Вход через официальный код Microsoft — пароль лаунчеру не передаётся</small></div><span className={microsoftProfile ? "connected" : "disconnected"}>{microsoftProfile ? "Подключён" : "Не подключён"}</span></div>
+          {!microsoftConfigured && <p className="muted small">Microsoft-вход не настроен в сборке. Проверь Client ID в настройках сборки GitHub Actions.</p>}
+          {microsoftProfile ? <><p className="muted small">Вошли как <b>{microsoftProfile.name}</b>. Этот профиль подтверждён для Minecraft Java.</p><button className="outline" onClick={() => void logoutMicrosoft()}>Выйти из Microsoft</button></> :
+            <><button className="primary" disabled={!microsoftConfigured || microsoftBusy} onClick={() => void beginMicrosoftLogin()}>{microsoftBusy ? "Ожидаем подтверждение Microsoft…" : "Войти через Microsoft"}</button>
+            {microsoftDevice && <div className="device-code-panel"><p>Перейди на <a href={microsoftDevice.verificationUri} target="_blank" rel="noreferrer">{microsoftDevice.verificationUri}</a> и введи код:</p><strong>{microsoftDevice.userCode}</strong><small>Оставь лаунчер открытым до завершения входа.</small></div>}</>}
+        </div>
         <div className="settings-card offline-profile-card"><div className="settings-heading"><div className="quick-icon"><Gamepad2 /></div><div><b>Локальный профиль (Offline)</b><small>Вход по игровому нику для локального тестирования</small></div><span className={offlineName ? "connected" : "disconnected"}>{offlineName ? "Активен" : "Не выбран"}</span></div><label className="field-label" htmlFor="offline-player-name">Игровой ник</label><input id="offline-player-name" className="wide-input" value={offlineNameDraft} onChange={e => setOfflineNameDraft(e.target.value)} maxLength={16} placeholder="Например, Steve_123" /><p className="muted small">От 3 до 16 символов: латинские буквы, цифры и подчёркивание.</p><button className="primary" onClick={saveOfflineProfile}>Сохранить локальный профиль</button></div>
       </section>}
 
