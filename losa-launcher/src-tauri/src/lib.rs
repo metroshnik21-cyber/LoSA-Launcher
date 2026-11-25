@@ -141,7 +141,7 @@ async fn login_microsoft_browser(auth_state: tauri::State<'_, std::sync::Mutex<O
         .append_pair("prompt", "select_account");
 
     #[cfg(target_os = "windows")]
-    let browser = std::process::Command::new("cmd").args(["/C", "start", "", authorize.as_str()]).spawn();
+    let browser = std::process::Command::new("cmd").arg("/C").arg(format!("start \"\" \"{}\"", authorize.as_str())).spawn();
     #[cfg(target_os = "macos")]
     let browser = std::process::Command::new("open").arg(authorize.as_str()).spawn();
     #[cfg(all(not(target_os = "windows"), not(target_os = "macos")))]
