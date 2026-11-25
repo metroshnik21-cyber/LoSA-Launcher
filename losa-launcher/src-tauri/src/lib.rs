@@ -257,7 +257,10 @@ async fn login_microsoft_browser(auth_state: tauri::State<'_, std::sync::Mutex<M
         let developer_message = details.get("developerMessage").and_then(|v| v.as_str()).unwrap_or("");
         let path = details.get("path").and_then(|v| v.as_str()).unwrap_or("/authentication/login_with_xbox");
         let detail = [error_message, developer_message].into_iter().filter(|v| !v.is_empty()).collect::<Vec<_>>().join(" ");
-        return Err(format!("Minecraft Services: HTTP {} ({service_error}) на {path}. {} Проверь право аккаунта запускать Minecraft Java и настройки Xbox-профиля.", minecraft_status, detail));
+        if minecraft_body.contains("Invalid app registration") {
+            return Err("Minecraft Services отклонил Client ID приложения L.o.S.A. (Invalid app registration). Это не связано с лицензией или Xbox-профилем аккаунта: требуется официальное одобрение регистрации приложения Minecraft. Открой раздел «Настройки» L.o.S.A. и перейди по ссылке на инструкцию Minecraft.".into());
+        }
+        return Err(format!("Minecraft Services: HTTP {} ({service_error}) на {path}. {} Проверь настройки Xbox-профиля.", minecraft_status, detail));
     }
     let mc_token: MinecraftLoginResponse = decode_auth_json(&minecraft_body, "Minecraft Services login", minecraft_status)?;
     let profile = client.get("https://api.minecraftservices.com/minecraft/profile")

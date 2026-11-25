@@ -144,6 +144,7 @@ export default function App() {
   const [microsoftAccounts, setMicrosoftAccounts] = useState<{ id: string; name: string }[]>([]);
   const [microsoftConfigured, setMicrosoftConfigured] = useState(false);
   const [microsoftBusy, setMicrosoftBusy] = useState(false);
+  const [microsoftRegistrationBlocked, setMicrosoftRegistrationBlocked] = useState(false);
   const [instances, setInstances] = useState<LauncherInstance[]>([]);
   const [versions, setVersions] = useState<MinecraftVersion[]>([]);
   const [selectedVersion, setSelectedVersion] = useState("1.21.4");
@@ -262,7 +263,12 @@ export default function App() {
       const profile = await invoke<{ id: string; name: string }>("login_microsoft_browser");
       await refreshMicrosoftAccounts();
       setNotice("Аккаунт Microsoft добавлен: " + profile.name);
-    } catch (e) { setError(asMessage(e)); }
+    } catch (e) {
+      const message = asMessage(e);
+      const registrationBlocked = message.toLowerCase().includes("invalid app registration") || message.toLowerCase().includes("client id приложения l.o.s.a.");
+      setMicrosoftRegistrationBlocked(registrationBlocked);
+      setError(registrationBlocked ? "Minecraft Services пока не разрешает Client ID L.o.S.A. Это ограничение регистрации приложения, а не отсутствие лицензии Java/Bedrock. Нужна официальная регистрация Client ID." : message);
+    }
     finally { setMicrosoftBusy(false); }
   };
 
@@ -418,10 +424,10 @@ export default function App() {
       </div>
       <div className="nav-label">БИБЛИОТЕКА</div>
       <nav>{nav.map(({ name, icon: Icon }) => <button key={name} className={page === name ? "nav-item selected" : "nav-item"} onClick={() => setPage(name)}><Icon size={18} /><span>{name}</span></button>)}</nav>
-      <div className="sidebar-bottom"><div className="status-dot" /> Offline-режим <span className="version">v0.10.7</span></div>
+      <div className="sidebar-bottom"><div className="status-dot" /> Offline-режим <span className="version">v0.10.20</span></div>
     </aside>
     <main className="main">
-      <header className="topbar"><div className="crumb">L.o.S.A. <span>/</span> {page}</div><button className="icon-button" title="Справка" onClick={() => setNotice("L.o.S.A. 0.10.7 — приглашения, роли и мастерская косметики.")}><CircleHelp size={18} /></button></header>
+      <header className="topbar"><div className="crumb">L.o.S.A. <span>/</span> {page}</div><button className="icon-button" title="Справка" onClick={() => setNotice("L.o.S.A. 0.10.20 — справка и поддержка.")}><CircleHelp size={18} /></button></header>
       {page === "Главная" && <section className="content">
         {instances.length === 0 ? <div className="hero"><div className="hero-copy"><div className="eyebrow"><Sparkles size={14} /> ВАШ MINECRAFT. ВАШИ ПРАВИЛА.</div><h1>Добро пожаловать<br /><em>в L.o.S.A.</em></h1><p>Создай первую сборку — LoSA сама подготовит игровые файлы и Java.</p><button className="primary" onClick={() => { setPage("Играть"); setShowCreate(true); }}><Plus size={16} /> Создать первую сборку</button></div><img className="hero-mark" src="/losa-logo.png" /></div>
         : <><div className="page-title"><div className="eyebrow">ТВОЙ ИГРОВОЙ ЦЕНТР</div><h1>С возвращением</h1><p>Недавно запускавшиеся сборки и быстрый переход к игре.</p></div><div className="section-head"><div><h2>Недавняя активность</h2><p>Сборки отсортированы по последнему запуску</p></div><button className="outline" onClick={() => { setPage("Играть"); setShowCreate(true); }}><Plus size={15} /> Новая сборка</button></div><div className="build-list">{recentInstances.map(instance => <BuildCard key={instance.id} instance={instance} />)}</div></>}
@@ -450,6 +456,7 @@ export default function App() {
         <div className="settings-card language-card"><div className="settings-heading"><div className="quick-icon"><Globe/></div><div><b>Язык интерфейса</b><small>Выбор сохраняется в настройках</small></div></div><label className="field-label" htmlFor="losa-language">Язык</label><select id="losa-language" className="wide-input" value={selectedLanguage} onChange={e=>{setSelectedLanguage(e.target.value);setNotice("Языковое предпочтение сохранено. Полные переводы подключим отдельным этапом локализации.");}}><option value="ru">Русский</option><option value="en">English</option><option value="de">Deutsch</option><option value="fr">Français</option><option value="es">Español</option><option value="zh-CN">简体中文</option><option value="be">Беларуская</option><option value="kk">Қазақша</option><option value="pt-BR">Português (Brasil)</option></select><p className="muted small">Сейчас интерфейс ещё отображается на русском. Смена языка сохранит предпочтение, а переводы будут включены после подготовки языковых пакетов.</p></div>
         <div className="settings-card offline-profile-card">
           <div className="settings-heading"><div className="quick-icon"><ShieldCheck /></div><div><b>Аккаунт Microsoft</b><small>Вход через официальный код Microsoft — пароль лаунчеру не передаётся</small></div><span className={microsoftProfile ? "connected" : "disconnected"}>{microsoftProfile ? "Подключён" : "Не подключён"}</span></div>
+          {microsoftRegistrationBlocked && <p className="auth-registration-help">Minecraft Services отклонил Client ID приложения. Это ограничение на стороне Minecraft, а не проверка покупки игры. <a href="https://help.minecraft.net/hc/en-us/articles/16254801392141" target="_blank" rel="noreferrer">Официальная инструкция Minecraft по регистрации приложения</a>.</p>}
           {!microsoftConfigured && <p className="muted small">Microsoft-вход не настроен в сборке. Проверь Client ID в настройках сборки GitHub Actions.</p>}
           {microsoftAccounts.length > 0 && <>
             <p className="muted small">Подключено аккаунтов: {microsoftAccounts.length}. Выбери профиль, с которого запускать Minecraft Java.</p>
@@ -500,7 +507,6 @@ export default function App() {
         <div className="store-hero"><div><span className="panel-kicker">ТВОЙ СТИЛЬ — ТВОИ ПРАВИЛА</span><h2>Сделай профиль<br/>узнаваемым</h2><p>Плащи, спутники, ауры, эмоции и оформление профиля.</p></div><div className="store-hero-gem">✧</div></div>
         <div className="store-toolbar">{["Все","Плащи","Головные уборы","Питомцы","Ауры","Эмоции","Рамки","Титулы"].map(c=><button key={c} className={storeCategory===c?"active":""} onClick={()=>setStoreCategory(c)}>{c}</button>)}</div>
         <div className="store-grid">{[
-          {name:"Северное сияние",kind:"Плащи",price:"Косметика",glyph:"✦",tone:"aurora"},
           {name:"Звёздная аура",kind:"Ауры",price:"Косметика",glyph:"✧",tone:"star"},
           {name:"Рамка созвездия",kind:"Рамки",price:"Профиль",glyph:"◇",tone:"frame"},
           {name:"Лунный след",kind:"Ауры",price:"Эффект",glyph:"☾",tone:"moon"},
@@ -537,6 +543,7 @@ export default function App() {
           {name:"Сон на ходу",kind:"Эмоции",price:"Анимация",glyph:"☾",tone:"emote-sleep"},
           {name:"Фирменный жест L.o.S.A.",kind:"Эмоции",price:"Анимация",glyph:"✦",tone:"emote-losa"}
         ].filter(x=>storeCategory==="Все"||x.kind===storeCategory).map(x=><article className="store-card" key={x.name}><div className={"store-art "+x.tone}><span>{x.glyph}</span><i>КОНЦЕПТ</i></div><div className="store-item-info"><div><h3>{x.name}</h3><small>{x.kind} · {x.price}</small></div><button className="outline" onClick={()=>setNotice("Витрина пока демонстрационная. Реальные покупки и инвентарь появятся после подключения магазина.")}>Скоро</button></div></article>)}</div>
+        {storeCategory === "Плащи" && <div className="cape-empty-state"><b>Твои плащи ещё не подключены</b><p>Здесь будут отдельные предметы с твоими исходными текстурами. Демонстрационные изображения вместо них показывать не будем.</p></div>}
         <div className="subscription-section"><div className="section-head"><div><h2>Подписки L.o.S.A.</h2><p>Косметика, титулы и оформление профиля</p></div></div><div className="plan-grid"><article className="plan-card"><span className="plan-label vip"><Crown size={12}/> VIP</span><h3>VIP</h3><p>Больше способов выразить свой стиль</p><div className="plan-spec"><span>Эксклюзивные косметические предметы</span><span>Набор титулов профиля</span><span>Особенная рамка профиля</span></div><b className="plan-price">€2,99 / мес.</b><button className="outline" onClick={()=>setNotice("Подписки пока концептуальные. Оплата и выдача предметов не подключены.")}>Скоро</button></article><article className="plan-card featured"><span className="plan-label vipplus"><Crown size={12}/> VIP+</span><h3>VIP+</h3><p>Расширенная косметическая коллекция</p><div className="plan-spec"><span>Все косметические наборы VIP</span><span>Дополнительные редкие титулы</span><span>Расширенная рамка и эффекты профиля</span></div><b className="plan-price">€5,99 / мес.</b><button className="primary" onClick={()=>setNotice("Подписки пока концептуальные. Оплата и выдача предметов не подключены.")}>Скоро</button></article></div></div>
         <div className="prototype-note"><ShieldCheck size={16}/> Витрина и категории готовы как интерфейс. Баланс, инвентарь и покупки пока отключены.</div>
       </section>}
