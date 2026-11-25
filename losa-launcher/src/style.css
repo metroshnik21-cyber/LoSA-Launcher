@@ -515,3 +515,41 @@ button:focus-visible{outline:2px solid var(--accent,#d8bd64);outline-offset:3px}
 .app-shell .theme-option.active{border-color:var(--accent)}
 .app-shell .file-picker:hover{border-color:var(--accent)}
 .app-shell .coming{border-color:color-mix(in srgb,var(--accent) 42%,transparent)}
+
+
+/* L.o.S.A. 0.10.10 — Bedrock creation view: remove dark-only surfaces in light theme. */
+.theme-light .bedrock-banner{
+  background:linear-gradient(115deg,#edf5ef,#e5eef0);
+  border-color:#c3d3ca;
+  color:#263a32;
+}
+.theme-light .bedrock-banner .panel-kicker{color:var(--accent)!important}
+.theme-light .bedrock-banner p{color:#53675d}
+.theme-light .bedrock-mark{background:#d6e8d7;color:#426d49}
+.theme-light .bedrock-install-state,
+.theme-light .bedrock-install-state.is-installed{
+  background:#edf6ef;
+  border-color:#bfd8c4;
+  color:#376747;
+}
+.theme-light .bedrock-install-state:not(.is-installed){background:#fbf2ed;border-color:#e4c9bd;color:#8a5140}
+.theme-light .bedrock-install-state b{color:#263a32}
+.theme-light .bedrock-install-state span{color:#61736a}
+.theme-light .bedrock-paths>div{background:#fff;border-color:#c5cfd4;color:#34464d}
+.theme-light .bedrock-paths b{color:#263a32}
+.theme-light .bedrock-paths small{color:#617078}
+.theme-light .bedrock-profiles{background:#fff;border-color:#c5cfd4;color:#26353b}
+.theme-light .bedrock-profiles .panel-heading b{color:#26353b}
+.theme-light .bedrock-profiles .panel-heading small{color:#65747a}
+.theme-light .bedrock-count{background:#e8eef0;color:#43545b}
+.theme-light .bedrock-create input{background:#fff;border-color:#b8c4ca;color:#26353b}
+.theme-light .bedrock-create input::placeholder{color:#89969b}
+.theme-light .bedrock-profile{background:#f4f7f8;border-color:#c8d2d6;color:#26353b}
+.theme-light .bedrock-profile-icon{background:#dcecdf;color:#477451}
+.theme-light .bedrock-profile-copy b{color:#26353b}
+.theme-light .bedrock-profile-copy small{color:#65747a}
+.theme-light .bedrock-empty{color:#65747a}
+.theme-light .bedrock-hub .prototype-note{background:#f1f5ed;border-color:#cbd8c3;color:#52634d}
+.theme-light .bedrock-hub .prototype-note svg{color:#5d8a60}
+.theme-light .bedrock-message{background:#edf6ef;border-color:#bfd8c4;color:#376747}
+.theme-light .bedrock-message.error{background:#fbf0ec;border-color:#e4c4b8;color:#8a5140}
