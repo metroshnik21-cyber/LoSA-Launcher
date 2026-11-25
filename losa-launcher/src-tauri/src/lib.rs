@@ -68,6 +68,19 @@ struct MinecraftAuthSession {
     profile: MinecraftProfile,
 }
 
+#[derive(Default)]
+struct MinecraftAuthState {
+    accounts: Vec<MinecraftAuthSession>,
+    active_profile_id: Option<String>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct MinecraftAuthStatus {
+    accounts: Vec<MinecraftProfile>,
+    active_profile_id: Option<String>,
+}
+
 fn auth_error(message: impl Into<String>) -> String {
     message.into()
 }
@@ -121,7 +134,7 @@ fn microsoft_auth_configured() -> bool {
 }
 
 #[tauri::command]
-async fn login_microsoft_browser(auth_state: tauri::State<'_, std::sync::Mutex<Option<MinecraftAuthSession>>>) -> Result<MinecraftProfile, String> {
+async fn login_microsoft_browser(auth_state: tauri::State<'_, std::sync::Mutex<MinecraftAuthState>>) -> Result<MinecraftProfile, String> {
     use base64::Engine;
     use rand::RngCore;
     use std::io::{Read, Write};
@@ -257,22 +270,51 @@ async fn login_microsoft_browser(auth_state: tauri::State<'_, std::sync::Mutex<O
     let profile_body = profile.text().await.map_err(|e| auth_error(format!("Не удалось получить тело профиля Minecraft: {e}")))?;
     let profile: MinecraftProfile = decode_auth_json(&profile_body, "Профиль Minecraft", profile_status)?;
     let session = MinecraftAuthSession { access_token: mc_token.access_token, profile: profile.clone() };
-    *auth_state.lock().map_err(|_| "Не удалось сохранить текущую игровую сессию.".to_string())? = Some(session);
+    let mut state = auth_state.lock().map_err(|_| "Не удалось сохранить текущую игровую сессию.".to_string())?;
+    if let Some(existing) = state.accounts.iter_mut().find(|item| item.profile.id == profile.id) {
+        *existing = session;
+    } else {
+        state.accounts.push(session);
+    }
+    state.active_profile_id = Some(profile.id.clone());
     Ok(profile)
 }
 
-
 #[tauri::command]
-fn minecraft_auth_status(auth_state: tauri::State<'_, std::sync::Mutex<Option<MinecraftAuthSession>>>) -> Option<MinecraftProfile> {
-    auth_state.lock().ok().and_then(|session| session.as_ref().map(|s| s.profile.clone()))
+fn minecraft_auth_status(auth_state: tauri::State<'_, std::sync::Mutex<MinecraftAuthState>>) -> Result<MinecraftAuthStatus, String> {
+    let state = auth_state.lock().map_err(|_| "Не удалось прочитать список Microsoft-аккаунтов.".to_string())?;
+    Ok(MinecraftAuthStatus {
+        accounts: state.accounts.iter().map(|item| item.profile.clone()).collect(),
+        active_profile_id: state.active_profile_id.clone(),
+    })
 }
 
 #[tauri::command]
-fn logout_minecraft(auth_state: tauri::State<'_, std::sync::Mutex<Option<MinecraftAuthSession>>>) -> Result<(), String> {
-    *auth_state.lock().map_err(|_| "Не удалось завершить игровую сессию.".to_string())? = None;
-    Ok(())
+fn switch_minecraft_account(profile_id: String, auth_state: tauri::State<'_, std::sync::Mutex<MinecraftAuthState>>) -> Result<MinecraftAuthStatus, String> {
+    let mut state = auth_state.lock().map_err(|_| "Не удалось переключить Microsoft-аккаунт.".to_string())?;
+    if !state.accounts.iter().any(|item| item.profile.id == profile_id) {
+        return Err("Этот Microsoft-аккаунт не найден в списке L.o.S.A.".into());
+    }
+    state.active_profile_id = Some(profile_id);
+    Ok(MinecraftAuthStatus {
+        accounts: state.accounts.iter().map(|item| item.profile.clone()).collect(),
+        active_profile_id: state.active_profile_id.clone(),
+    })
 }
 
+#[tauri::command]
+fn logout_minecraft(profile_id: String, auth_state: tauri::State<'_, std::sync::Mutex<MinecraftAuthState>>) -> Result<MinecraftAuthStatus, String> {
+    let mut state = auth_state.lock().map_err(|_| "Не удалось завершить Microsoft-сеанс.".to_string())?;
+    let previous_active = state.active_profile_id.clone();
+    state.accounts.retain(|item| item.profile.id != profile_id);
+    if previous_active.as_deref() == Some(profile_id.as_str()) {
+        state.active_profile_id = state.accounts.last().map(|item| item.profile.id.clone());
+    }
+    Ok(MinecraftAuthStatus {
+        accounts: state.accounts.iter().map(|item| item.profile.clone()).collect(),
+        active_profile_id: state.active_profile_id.clone(),
+    })
+}
 
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -966,7 +1008,7 @@ fn append_metadata_arguments(
     }
 }
 #[tauri::command]
-async fn launch_minecraft(version_id: String, auth_mode: String, offline_name: Option<String>, instance_id: Option<String>, auth_state: tauri::State<'_, std::sync::Mutex<Option<MinecraftAuthSession>>>) -> Result<u32, String> {
+async fn launch_minecraft(version_id: String, auth_mode: String, offline_name: Option<String>, instance_id: Option<String>, auth_state: tauri::State<'_, std::sync::Mutex<MinecraftAuthState>>) -> Result<u32, String> {
     let mut version_id = version_id.trim().to_string();
     let mut instance_game_dir = None;
     if let Some(id) = instance_id.as_deref() {
@@ -981,9 +1023,12 @@ async fn launch_minecraft(version_id: String, auth_mode: String, offline_name: O
     let version_id = version_id.as_str();
     let (profile, access_token, user_type) = match auth_mode.as_str() {
         "microsoft" => {
-            let session = auth_state.lock().map_err(|_| "Не удалось проверить игровую сессию.".to_string())?.clone()
-                .ok_or_else(|| "Сначала войди через Microsoft в разделе «Настройки».".to_string())?;
-            (session.profile, session.access_token, "msa".to_string())
+            let state = auth_state.lock().map_err(|_| "Не удалось проверить игровую сессию.".to_string())?;
+            let active_id = state.active_profile_id.as_deref()
+                .ok_or_else(|| "Сначала выбери Microsoft-аккаунт в разделе «Настройки».".to_string())?;
+            let session = state.accounts.iter().find(|item| item.profile.id == active_id)
+                .ok_or_else(|| "Активный Microsoft-аккаунт не найден. Выбери его заново в настройках.".to_string())?;
+            (session.profile.clone(), session.access_token.clone(), "msa".to_string())
         }
         "offline" => {
             let name = offline_name.unwrap_or_default().trim().to_string();
@@ -1174,8 +1219,8 @@ fn detect_java() -> String {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
-        .manage(std::sync::Mutex::new(None::<MinecraftAuthSession>))
-        .invoke_handler(tauri::generate_handler![detect_bedrock_installation, list_bedrock_instances, create_bedrock_instance, delete_bedrock_instance, launch_bedrock, detect_java, microsoft_auth_configured, login_microsoft_browser, minecraft_auth_status, logout_minecraft, list_instances, create_instance, update_instance, delete_instance, prepare_instance, install_vanilla_client, install_minecraft_dependencies, get_minecraft_installation_status, launch_minecraft])
+        .manage(std::sync::Mutex::new(MinecraftAuthState::default()))
+        .invoke_handler(tauri::generate_handler![detect_bedrock_installation, list_bedrock_instances, create_bedrock_instance, delete_bedrock_instance, launch_bedrock, detect_java, microsoft_auth_configured, login_microsoft_browser, minecraft_auth_status, switch_minecraft_account, logout_minecraft, list_instances, create_instance, update_instance, delete_instance, prepare_instance, install_vanilla_client, install_minecraft_dependencies, get_minecraft_installation_status, launch_minecraft])
         .run(tauri::generate_context!())
         .expect("error while running L.o.S.A.");
 }

@@ -141,6 +141,7 @@ export default function App() {
   const [offlineName, setOfflineName] = useState(() => localStorage.getItem("losa.offlineName") ?? "");
   const [offlineNameDraft, setOfflineNameDraft] = useState(() => localStorage.getItem("losa.offlineName") ?? "");
   const [microsoftProfile, setMicrosoftProfile] = useState<{ id: string; name: string } | null>(null);
+  const [microsoftAccounts, setMicrosoftAccounts] = useState<{ id: string; name: string }[]>([]);
   const [microsoftConfigured, setMicrosoftConfigured] = useState(false);
   const [microsoftBusy, setMicrosoftBusy] = useState(false);
   const [instances, setInstances] = useState<LauncherInstance[]>([]);
@@ -244,24 +245,42 @@ export default function App() {
     [instances]
   );
 
+  const refreshMicrosoftAccounts = async () => {
+    const status = await invoke<{ accounts: { id: string; name: string }[]; activeProfileId: string | null }>("minecraft_auth_status");
+    setMicrosoftAccounts(status.accounts);
+    setMicrosoftProfile(status.accounts.find(account => account.id === status.activeProfileId) ?? null);
+  };
+
   useEffect(() => {
     void invoke<boolean>("microsoft_auth_configured").then(setMicrosoftConfigured).catch(() => setMicrosoftConfigured(false));
-    void invoke<{ id: string; name: string } | null>("minecraft_auth_status").then(setMicrosoftProfile).catch(() => setMicrosoftProfile(null));
+    void refreshMicrosoftAccounts().catch(() => { setMicrosoftAccounts([]); setMicrosoftProfile(null); });
   }, []);
 
   const beginMicrosoftLogin = async () => {
     setMicrosoftBusy(true); setError("");
     try {
       const profile = await invoke<{ id: string; name: string }>("login_microsoft_browser");
-      setMicrosoftProfile(profile);
-      setNotice("Вход Microsoft выполнен. Профиль Minecraft: " + profile.name);
+      await refreshMicrosoftAccounts();
+      setNotice("Аккаунт Microsoft добавлен: " + profile.name);
     } catch (e) { setError(asMessage(e)); }
     finally { setMicrosoftBusy(false); }
   };
 
+  const switchMicrosoftAccount = async (profileId: string) => {
+    try {
+      await invoke("switch_minecraft_account", { profileId });
+      await refreshMicrosoftAccounts();
+      setNotice("Активный Minecraft-аккаунт переключён.");
+    } catch (e) { setError(asMessage(e)); }
+  };
+
   const logoutMicrosoft = async () => {
-    try { await invoke("logout_minecraft"); setMicrosoftProfile(null); setNotice("Сеанс Microsoft завершён."); }
-    catch (e) { setError(asMessage(e)); }
+    if (!microsoftProfile) return;
+    try {
+      await invoke("logout_minecraft", { profileId: microsoftProfile.id });
+      await refreshMicrosoftAccounts();
+      setNotice("Microsoft-аккаунт удалён из списка L.o.S.A.");
+    } catch (e) { setError(asMessage(e)); }
   };
 
   const saveOfflineProfile = () => {
@@ -432,8 +451,16 @@ export default function App() {
         <div className="settings-card offline-profile-card">
           <div className="settings-heading"><div className="quick-icon"><ShieldCheck /></div><div><b>Аккаунт Microsoft</b><small>Вход через официальный код Microsoft — пароль лаунчеру не передаётся</small></div><span className={microsoftProfile ? "connected" : "disconnected"}>{microsoftProfile ? "Подключён" : "Не подключён"}</span></div>
           {!microsoftConfigured && <p className="muted small">Microsoft-вход не настроен в сборке. Проверь Client ID в настройках сборки GitHub Actions.</p>}
-          {microsoftProfile ? <><p className="muted small">Вошли как <b>{microsoftProfile.name}</b>. Этот профиль подтверждён для Minecraft Java.</p><button className="outline" onClick={() => void logoutMicrosoft()}>Выйти из Microsoft</button></> :
-            <><button className="primary" disabled={!microsoftConfigured || microsoftBusy} onClick={() => void beginMicrosoftLogin()}>{microsoftBusy ? "Ожидаем вход в браузере…" : "Войти через Microsoft"}</button></>}
+          {microsoftAccounts.length > 0 && <>
+            <p className="muted small">Подключено аккаунтов: {microsoftAccounts.length}. Выбери профиль, с которого запускать Minecraft Java.</p>
+            <label className="field-label" htmlFor="microsoft-account-select">Активный аккаунт</label>
+            <select id="microsoft-account-select" className="wide-input" value={microsoftProfile?.id ?? ""} onChange={e => void switchMicrosoftAccount(e.target.value)}>
+              {microsoftAccounts.map(account => <option key={account.id} value={account.id}>{account.name}</option>)}
+            </select>
+            {microsoftProfile && <p className="muted small">Активен: <b>{microsoftProfile.name}</b></p>}
+            <button className="outline" onClick={() => void logoutMicrosoft()}>Удалить активный аккаунт</button>
+          </>}
+          <button className="primary" disabled={!microsoftConfigured || microsoftBusy} onClick={() => void beginMicrosoftLogin()}>{microsoftBusy ? "Ожидаем вход в браузере…" : microsoftAccounts.length ? "Добавить другой Microsoft-аккаунт" : "Войти через Microsoft"}</button>
         </div>
         <div className="settings-card offline-profile-card"><div className="settings-heading"><div className="quick-icon"><Gamepad2 /></div><div><b>Локальный профиль (Offline)</b><small>Вход по игровому нику для локального тестирования</small></div><span className={offlineName ? "connected" : "disconnected"}>{offlineName ? "Активен" : "Не выбран"}</span></div><label className="field-label" htmlFor="offline-player-name">Игровой ник</label><input id="offline-player-name" className="wide-input" value={offlineNameDraft} onChange={e => setOfflineNameDraft(e.target.value)} maxLength={16} placeholder="Например, Steve_123" /><p className="muted small">От 3 до 16 символов: латинские буквы, цифры и подчёркивание.</p><button className="primary" onClick={saveOfflineProfile}>Сохранить локальный профиль</button></div>
       </section>}

@@ -471,3 +471,7 @@ button:focus-visible{outline:2px solid var(--accent,#d8bd64);outline-offset:3px}
 .theme-light .bedrock-hub .prototype-note svg{color:#5d8a60}
 .theme-light .bedrock-message{background:#edf6ef;border-color:#bfd8c4;color:#376747}
 .theme-light .bedrock-message.error{background:#fbf0ec;border-color:#e4c4b8;color:#8a5140}
+
+
+/* Microsoft account selector */
+#microsoft-account-select{margin:8px 0 12px}
