@@ -16,6 +16,7 @@ on:
       - "feature/bedrock-runtime-0.10.10"
       - "feature/bedrock-runtime-0.10.12"
       - "feature/bedrock-runtime-0.10.14"
+      - "feature/bedrock-runtime-0.10.15"
       - "feature/cosmetic-3d-workshop-0.10.9"
   push:
     branches:
@@ -29,6 +30,7 @@ on:
       - "feature/bedrock-runtime-0.10.10"
       - "feature/bedrock-runtime-0.10.12"
       - "feature/bedrock-runtime-0.10.14"
+      - "feature/bedrock-runtime-0.10.15"
     tags:
       - "v*"
 
