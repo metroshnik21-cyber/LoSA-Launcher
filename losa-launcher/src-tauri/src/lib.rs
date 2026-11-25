@@ -109,65 +109,87 @@ fn microsoft_auth_configured() -> bool {
 }
 
 #[tauri::command]
-async fn start_microsoft_login() -> Result<DeviceCodeInfo, String> {
-    let client_id = microsoft_client_id()?;
-    let client = reqwest::Client::new();
-    let response = client
-        .post("https://login.microsoftonline.com/consumers/oauth2/v2.0/devicecode")
-        .form(&[("client_id", client_id), ("scope", "XboxLive.signin offline_access")])
-        .send().await.map_err(|e| auth_error(format!("Не удалось связаться с Microsoft: {e}")))?;
-    let status = response.status();
-    let body: serde_json::Value = response.json().await
-        .map_err(|e| auth_error(format!("Не удалось прочитать ответ Microsoft: {e}")))?;
-    if !status.is_success() {
-        let code = body.get("error").and_then(|v| v.as_str()).unwrap_or("ошибка без кода");
-        let description = body.get("error_description").and_then(|v| v.as_str()).unwrap_or("Microsoft не сообщил подробности.");
-        return Err(format!("Microsoft отклонил запрос ({status}, {code}): {description}"));
-    }
-    let data: DeviceCodeResponse = serde_json::from_value(body)
-        .map_err(|e| auth_error(format!("Не удалось разобрать ответ Microsoft: {e}")))?;
-    Ok(DeviceCodeInfo {
-        device_code: data.device_code, user_code: data.user_code,
-        verification_uri: data.verification_uri, message: data.message,
-        interval: data.interval.unwrap_or(5), expires_in: data.expires_in,
-    })
-}
+async fn login_microsoft_browser(auth_state: tauri::State<'_, std::sync::Mutex<Option<MinecraftAuthSession>>>) -> Result<MinecraftProfile, String> {
+    use base64::Engine;
+    use rand::RngCore;
+    use std::io::{Read, Write};
 
-#[tauri::command]
-async fn complete_microsoft_login(device_code: String, interval: u64, expires_in: u64, auth_state: tauri::State<'_, std::sync::Mutex<Option<MinecraftAuthSession>>>) -> Result<MinecraftProfile, String> {
     let client_id = microsoft_client_id()?;
+    let listener = std::net::TcpListener::bind(("127.0.0.1", 0))
+        .map_err(|e| auth_error(format!("Не удалось открыть локальный адрес возврата Microsoft: {e}")))?;
+    let port = listener.local_addr().map_err(|e| auth_error(format!("Не удалось определить порт возврата: {e}")))?.port();
+    let redirect_uri = format!("http://localhost:{port}");
+    let mut verifier_bytes = [0u8; 32];
+    let mut state_bytes = [0u8; 24];
+    rand::rngs::OsRng.fill_bytes(&mut verifier_bytes);
+    rand::rngs::OsRng.fill_bytes(&mut state_bytes);
+    let verifier = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(verifier_bytes);
+    let state = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(state_bytes);
+    let challenge = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(sha2::Sha256::digest(verifier.as_bytes()));
+
+    let mut authorize = reqwest::Url::parse("https://login.microsoftonline.com/consumers/oauth2/v2.0/authorize")
+        .map_err(|e| auth_error(format!("Не удалось подготовить страницу Microsoft: {e}")))?;
+    authorize.query_pairs_mut()
+        .append_pair("client_id", client_id)
+        .append_pair("response_type", "code")
+        .append_pair("redirect_uri", &redirect_uri)
+        .append_pair("response_mode", "query")
+        .append_pair("scope", "XboxLive.signin offline_access")
+        .append_pair("state", &state)
+        .append_pair("code_challenge", &challenge)
+        .append_pair("code_challenge_method", "S256")
+        .append_pair("prompt", "select_account");
+
+    #[cfg(target_os = "windows")]
+    let browser = std::process::Command::new("cmd").args(["/C", "start", "", authorize.as_str()]).spawn();
+    #[cfg(target_os = "macos")]
+    let browser = std::process::Command::new("open").arg(authorize.as_str()).spawn();
+    #[cfg(all(not(target_os = "windows"), not(target_os = "macos")))]
+    let browser = std::process::Command::new("xdg-open").arg(authorize.as_str()).spawn();
+    browser.map_err(|e| auth_error(format!("Не удалось открыть браузер для входа Microsoft: {e}")))?;
+
+    let (code, returned_state) = tokio::task::spawn_blocking(move || -> Result<(String, String), String> {
+        listener.set_nonblocking(true).map_err(|e| format!("Ошибка локального сервера авторизации: {e}"))?;
+        let started = std::time::Instant::now();
+        let (mut stream, _) = loop {
+            match listener.accept() {
+                Ok(pair) => break pair,
+                Err(e) if e.kind() == std::io::ErrorKind::WouldBlock && started.elapsed() < Duration::from_secs(180) => std::thread::sleep(Duration::from_millis(150)),
+                Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => return Err("Время ожидания входа Microsoft истекло. Попробуй ещё раз.".into()),
+                Err(e) => return Err(format!("Не удалось принять возврат Microsoft: {e}")),
+            }
+        };
+        let mut request = [0u8; 8192];
+        let size = stream.read(&mut request).map_err(|e| format!("Не удалось прочитать ответ Microsoft: {e}"))?;
+        let first_line = String::from_utf8_lossy(&request[..size]).lines().next().unwrap_or("").to_string();
+        let target = first_line.split_whitespace().nth(1).unwrap_or("/");
+        let callback = reqwest::Url::parse(&format!("http://localhost{target}")).map_err(|e| format!("Некорректный ответ Microsoft: {e}"))?;
+        let params: std::collections::HashMap<String, String> = callback.query_pairs().map(|(k,v)|(k.into_owned(),v.into_owned())).collect();
+        let page = if params.contains_key("code") { "Вход подтверждён. Можно вернуться в L.o.S.A." } else { "Microsoft не завершил вход. Вернись в L.o.S.A. и попробуй снова." };
+        let response = format!("HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nConnection: close\r\n\r\n<html><meta charset=\"utf-8\"><title>L.o.S.A.</title><body style=\"font-family:Segoe UI;text-align:center;padding:48px;background:#111;color:#eee\"><h2>{page}</h2></body></html>");
+        let _ = stream.write_all(response.as_bytes());
+        let code = params.get("code").cloned().ok_or_else(|| params.get("error_description").cloned().unwrap_or_else(|| "Microsoft отклонил вход.".into()))?;
+        let returned_state = params.get("state").cloned().unwrap_or_default();
+        Ok((code, returned_state))
+    }).await.map_err(|e| auth_error(format!("Ошибка ожидания возврата Microsoft: {e}")))??;
+    if returned_state != state { return Err("Проверка безопасности Microsoft не пройдена (state не совпадает).".into()); }
+
     let client = reqwest::Client::new();
-    let started = std::time::Instant::now();
-    let mut delay = interval.max(5);
-    let microsoft_token = loop {
-        if started.elapsed().as_secs() >= expires_in {
-            return Err("Время действия кода истекло. Начни вход заново.".into());
-        }
-        tokio::time::sleep(Duration::from_secs(delay)).await;
-        let response = client.post("https://login.microsoftonline.com/consumers/oauth2/v2.0/token")
-            .form(&[
-                ("grant_type", "urn:ietf:params:oauth:grant-type:device_code"),
-                ("client_id", client_id), ("device_code", device_code.as_str()),
-            ])
-            .send().await.map_err(|e| auth_error(format!("Ошибка ожидания входа Microsoft: {e}")))?;
-        let status = response.status();
-        let body: serde_json::Value = response.json().await
-            .map_err(|e| auth_error(format!("Некорректный ответ Microsoft: {e}")))?;
-        if status.is_success() {
-            break serde_json::from_value::<MicrosoftToken>(body)
-                .map_err(|e| auth_error(format!("В ответе Microsoft нет токена: {e}")))?;
-        }
-        match body.get("error").and_then(|v| v.as_str()).unwrap_or("") {
-            "authorization_pending" => continue,
-            "slow_down" => { delay += 5; continue; }
-            "authorization_declined" => return Err("Вход был отменён в окне Microsoft.".into()),
-            "expired_token" => return Err("Код входа истёк. Начни заново.".into()),
-            other => {
-                let description = body.get("error_description").and_then(|v| v.as_str()).unwrap_or("Microsoft не сообщил подробности.");
-                return Err(format!("Microsoft OAuth ({other}): {description}"));
-            },
-        }
-    };
+    let response = client.post("https://login.microsoftonline.com/consumers/oauth2/v2.0/token")
+        .form(&[
+            ("client_id", client_id), ("grant_type", "authorization_code"),
+            ("code", code.as_str()), ("redirect_uri", redirect_uri.as_str()),
+            ("code_verifier", verifier.as_str()), ("scope", "XboxLive.signin offline_access"),
+        ])
+        .send().await.map_err(|e| auth_error(format!("Не удалось обменять код Microsoft: {e}")))?;
+    let status = response.status();
+    let body: serde_json::Value = response.json().await.map_err(|e| auth_error(format!("Некорректный ответ Microsoft: {e}")))?;
+    if !status.is_success() {
+        let code = body.get("error").and_then(|v| v.as_str()).unwrap_or("oauth_error");
+        let description = body.get("error_description").and_then(|v| v.as_str()).unwrap_or("Microsoft не сообщил подробности.");
+        return Err(format!("Microsoft OAuth ({code}): {description}"));
+    }
+    let microsoft_token: MicrosoftToken = serde_json::from_value(body).map_err(|e| auth_error(format!("В ответе Microsoft нет токена: {e}")))?;
     let xbox = client.post("https://user.auth.xboxlive.com/user/authenticate")
         .header("Accept", "application/json")
         .json(&serde_json::json!({
@@ -215,6 +237,7 @@ async fn complete_microsoft_login(device_code: String, interval: u64, expires_in
     *auth_state.lock().map_err(|_| "Не удалось сохранить текущую игровую сессию.".to_string())? = Some(session);
     Ok(profile)
 }
+
 
 #[tauri::command]
 fn minecraft_auth_status(auth_state: tauri::State<'_, std::sync::Mutex<Option<MinecraftAuthSession>>>) -> Option<MinecraftProfile> {
@@ -1129,7 +1152,7 @@ fn detect_java() -> String {
 pub fn run() {
     tauri::Builder::default()
         .manage(std::sync::Mutex::new(None::<MinecraftAuthSession>))
-        .invoke_handler(tauri::generate_handler![detect_bedrock_installation, list_bedrock_instances, create_bedrock_instance, delete_bedrock_instance, launch_bedrock, detect_java, microsoft_auth_configured, start_microsoft_login, complete_microsoft_login, minecraft_auth_status, logout_minecraft, list_instances, create_instance, update_instance, delete_instance, prepare_instance, install_vanilla_client, install_minecraft_dependencies, get_minecraft_installation_status, launch_minecraft])
+        .invoke_handler(tauri::generate_handler![detect_bedrock_installation, list_bedrock_instances, create_bedrock_instance, delete_bedrock_instance, launch_bedrock, detect_java, microsoft_auth_configured, login_microsoft_browser, minecraft_auth_status, logout_minecraft, list_instances, create_instance, update_instance, delete_instance, prepare_instance, install_vanilla_client, install_minecraft_dependencies, get_minecraft_installation_status, launch_minecraft])
         .run(tauri::generate_context!())
         .expect("error while running L.o.S.A.");
 }
